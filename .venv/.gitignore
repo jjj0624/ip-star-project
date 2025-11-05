@@ -1,0 +1,18 @@
+venv/
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 敏感信息 (绝不能上传)
+.env
+
+# PyCharm/VSCode 配置文件
+.idea/
+.vscode/
+
+# 数据库文件 (如果是 sqlite)
+*.db
+*.sqlite3
+

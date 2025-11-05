@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>{{ title }}</h2>
+    <p>欢迎, {{ current_user.username }}。探索可合作的 IP 形象。</p>
+
+    <div class="card my-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('main.portal_dashboard') }}">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="q" class="form-label">IP 名称</label>
+                        <input type="text" class="form-control" id="q" name="q" value="{{ search_query or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="category" class="form-label">IP 类别</label>
+                        <select class="form-select" id="category" name="category">
+                            <option value="">所有类别</option>
+                            {% for category in categories %}
+                                <option value="{{ category }}" {% if category == selected_category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="value_level" class="form-label">商业价值</label>
+                        <select class="form-select" id="value_level" name="value_level">
+                            <option value="">所有等级</option>
+                            {% for level in value_levels %}
+                                <option value="{{ level }}" {% if level == selected_level %}selected{% endif %}>
+                                    {{ level }} 级
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 align-self-end">
+                        <button type="submit" class="btn btn-primary w-100">查询</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-4 g-4"> {% for ip in ips %}
+            <div class="col">
+                {% include '_ip_card.html' %}
+            </div>
+        {% else %}
+            <div class="col-12">
+                <p class="text-center text-muted">没有找到符合条件的 IP 形象。</p>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

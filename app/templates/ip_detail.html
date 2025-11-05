@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-6">
+            <img src="{{ url_for('static', filename=ip.image_url) }}" class="img-fluid rounded" alt="{{ ip.name }}">
+        </div>
+
+        <div class="col-md-6">
+            <h2>{{ ip.name }}</h2>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <strong>IP 类别:</strong> {{ ip.category }}
+                </li>
+                <li class="list-group-item">
+                    <strong>商业价值:</strong> {{ ip.value_level }} 级
+                </li>
+                <li class="list-group-item">
+                    <strong>作者:</strong> {{ ip.author }}
+                </li>
+                <li class="list-group-item">
+                    <strong>登记号:</strong> {{ ip.reg_number }}
+                </li>
+                <li class="list-group-item">
+                    <strong>创作说明:</strong>
+                    <p>{{ ip.description }}</p>
+                </li>
+            </ul>
+            <a href="{{ url_for('main.portal_dashboard') }}" class="btn btn-secondary mt-3">返回列表</a>
+        </div>
+    </div>
+{% endblock %}

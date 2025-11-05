@@ -1,0 +1,9 @@
+<div class="card h-100 shadow-sm">
+    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" alt="{{ ip.name }}" style="height: 250px; object-fit: cover;">
+    <div class="card-body text-center">
+        <h5 class="card-title">{{ ip.name }}</h5>
+    </div>
+    <div class="card-footer text-center">
+        <a href="{{ url_for('main.ip_detail', ip_id=ip.id) }}" class="btn btn-primary">查看详情</a>
+    </div>
+</div>
