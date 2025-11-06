@@ -11,6 +11,7 @@ from sqlalchemy import not_, or_
 from datetime import date, timedelta
 from functools import wraps
 from werkzeug.utils import secure_filename  # 用于安全地获取文件名
+import json  # 确保导入 json
 
 # 创建一个蓝图
 bp = Blueprint('main', __name__)
@@ -51,7 +52,12 @@ def save_picture(form_picture):
 
     # 构造保存路径
     # current_app.root_path 是项目根目录 (ip_star_project)
-    picture_path = os.path.join(current_app.root_path, 'app/static/images', picture_fn)
+    # 我们需要用 os.path.join 来正确拼接路径
+    # app.root_path 在 app/__init__.py 之后是 app 文件夹
+    # current_app.root_path 指向 run.py 所在的目录
+    # 在 create_app 中 app = Flask(__name__)，app.root_path 指向 app 目录
+    # 修正：我们应该用 current_app.root_path 来定位 app 文件夹
+    picture_path = os.path.join(current_app.root_path, 'static/images', picture_fn)
 
     # 压缩图片
     output_size = (800, 800)  # 限制最大尺寸
@@ -60,7 +66,7 @@ def save_picture(form_picture):
     i.save(picture_path)
 
     # 返回相对路径，用于存储在数据库
-    return os.path.join('images', picture_fn)
+    return os.path.join('images', picture_fn).replace('\\', '/')  # 确保使用 /
 
 
 def get_licensing_status(ip):
@@ -157,7 +163,8 @@ def internal_dashboard():
     # 动态计算 IP 状态
     all_ips = []
     for ip in all_ips_raw:
-        ip.current_status = get_licensing_status(ip)  # 动态添加属性
+        # 修正属性名，以匹配 internal_dashboard.html
+        ip.computed_status = get_licensing_status(ip)  # 动态添加属性
         all_ips.append(ip)
 
     # --- 合同台账筛选 ---
@@ -196,22 +203,21 @@ def add_ip():
         # 处理图片上传
         picture_file_path = 'images/default.png'  # 默认图片
         if form.image_file.data:
+            # 修正：save_picture 应该在 app/routes.py 中定义
             picture_file_path = save_picture(form.image_file.data)
-            # 确保路径在 Windows 和 Linux 之间兼容 (用 /)
-            picture_file_path = picture_file_path.replace('\\', '/')
 
         new_ip = IpAsset(
             name=form.name.data,
             category=form.category.data,
             description=form.description.data,
-            image_url=picture_file_path,
+            image_url=picture_file_path,  # 存储相对路径
             author=form.author.data,
             ownership=form.ownership.data,
             reg_number=form.reg_number.data,
             reg_date=form.reg_date.data,
             license_type_options=form.license_type_options.data,
-            value_level=form.value_level.data,
-            internal_status=form.internal_status.data
+            value_level=form.value_level.data
+            # internal_status 字段在 V3 中已移除
             # cooperation_count 默认为 0
         )
         try:
@@ -271,8 +277,7 @@ def add_contract():
 def delete_ip(ip_id):
     ip_to_delete = IpAsset.query.get_or_404(ip_id)
     try:
-        # （注意：如果合同表设置了 RESTRICT，这里需要先删除关联合同）
-        # 鉴于我们设置了 RESTRICT，我们应该先检查
+        # 检查关联合同
         if ip_to_delete.contracts:
             flash('删除失败！该 IP 尚有关联合同，请先删除相关合同。', 'danger')
             return redirect(url_for('main.internal_dashboard'))
@@ -367,7 +372,6 @@ def ip_detail(ip_id):
     ip = IpAsset.query.get_or_404(ip_id)
 
     # 关键：把点击统计逻辑放在这里！
-    # 只有当用户真正点击“查看详情”时，才记录一次点击
     try:
         new_click = IpAnalytics(ip_id=ip.id, user_id=current_user.id)
         db.session.add(new_click)
@@ -386,27 +390,31 @@ def ip_detail(ip_id):
 def api_get_report():
     """
     (内控端) AI工具：一键生成报表
-    为了演示，这里返回模拟数据 (Mock Data)。
-    在真实项目中，这里应该执行复杂的数据库查询。
+    V3 版：返回扁平化的纯文本，以匹配腾讯云的“三栏”配置。
     """
     try:
-        # --- 模拟IP点击量数据 ---
-        # 真实查询: db.session.query(IpAsset.name, func.count(IpAnalytics.id))...
-        ip_clicks = [
+        # --- 1. 模拟IP点击量数据 ---
+        ip_clicks_data = [
             {"name": "墨卿", "clicks": 120},
             {"name": "星核仔", "clicks": 95},
             {"name": "林小满", "clicks": 80},
         ]
+        # 在服务器端格式化为纯文本
+        ip_clicks_report = "IP 点击量排行 (模拟数据):\n" + "\n".join(
+            [f"- {item['name']}: {item['clicks']} 次点击" for item in ip_clicks_data]
+        )
 
-        # --- 模拟IP许可收益排行 ---
-        # 真实查询: 涉及复杂的 fee_standard 解析和 payment_cycle 计算
-        revenue_ranking = [
+        # --- 2. 模拟IP许可收益排行 ---
+        revenue_data = [
             {"name": "墨卿", "revenue": "约 250,000 元 (含分成)"},
             {"name": "星核仔", "revenue": "800,000 元 (保底)"},
             {"name": "蓝星豆", "revenue": "500,000 元 (保底)"},
         ]
+        revenue_report = "IP 许可收益排行 (模拟数据):\n" + "\n".join(
+            [f"- {item['name']}: {item['revenue']}" for item in revenue_data]
+        )
 
-        # --- 真实查询：在一个季度内即将到期的IP ---
+        # --- 3. 真实查询：在一个季度内即将到期的IP ---
         today = date.today()
         ninety_days_later = today + timedelta(days=90)
         expiring_contracts = db.session.query(Contract.partner_name, IpAsset.name, Contract.term_end) \
@@ -416,51 +424,59 @@ def api_get_report():
             Contract.term_end <= ninety_days_later
         ).all()
 
-        expiring_list = [
-            f"{c.partner_name} (IP: {c.name}) - 到期日: {c.term_end.strftime('%Y-%m-%d')}"
-            for c in expiring_contracts
-        ]
+        if expiring_contracts:
+            expiring_report = "90天内即将到期的合同 (真实数据):\n" + "\n".join(
+                [f"- {c.partner_name} (IP: {c.name}) - 到期日: {c.term_end.strftime('%Y-%m-%d')}"
+                 for c in expiring_contracts]
+            )
+        else:
+            expiring_report = "90天内没有即将到期的合同。"
 
-        # --- 模拟：一个月内需要付费的公司 ---
-        # 真实查询: 涉及复杂的 payment_cycle 解析
-        due_payments = [
+        # --- 4. 模拟：一个月内需要付费的公司 ---
+        payments_data = [
             {"partner": "晨天文具制造有限公司", "due_date": "2025-11-15", "amount": "约 75,000 元 (第二期)"},
             {"partner": "宇溯游戏开发有限公司", "due_date": "2025-11-20", "amount": "季度流水分成"},
         ]
+        payments_due_report = "30天内需要付费的公司 (模拟数据):\n" + "\n".join(
+            [f"- {item['partner']} (付款日: {item['due_date']}) - 金额: {item['amount']}" for item in payments_data]
+        )
 
-        # 返回 JSON
+        # 返回“扁平”的 JSON，只包含纯文本
         return jsonify({
             "status": "success",
-            "ip_click_data": ip_clicks,
-            "ip_revenue_ranking": revenue_ranking,
-            "expiring_in_90_days": expiring_list,
-            "payments_due_in_30_days": due_payments
+            "ip_clicks_report": ip_clicks_report,
+            "revenue_report": revenue_report,
+            "expiring_report": expiring_report,
+            "payments_due_report": payments_due_report
         })
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        # 出错时也返回扁平的 error
+        return jsonify({
+            "status": "error",
+            "ip_clicks_report": f"生成失败: {e}",
+            "revenue_report": f"生成失败: {e}",
+            "expiring_report": f"生成失败: {e}",
+            "payments_due_report": f"生成失败: {e}"
+        }), 500
 
 
 @bp.route('/api/query_breach_terms')
 def api_query_breach_terms():
     """
     (内控端) AI工具：对方违约急救指南
-    根据关键词查询合同表中的 'breach_terms' 字段。
+    V3 版：同样返回“扁平”的纯文本，以匹配腾讯云的“三栏”配置。
     """
-    # 从 AI 工具的 API 调用中获取查询参数 'q'
     query = request.args.get('q', '')
 
     if not query:
         return jsonify({
             "status": "error",
-            "message": "查询失败，必须提供关键词 (参数 'q')。"
+            "report": "查询失败，必须提供关键词 (参数 'q')。"
         }), 400
 
     try:
-        # 模糊搜索：
-        # 搜索 "相对方名称" 或 "违约责任" 字段中包含查询关键词的合同
         search_term = f'%{query}%'
-
         contracts_found = db.session.query(Contract.partner_name, Contract.breach_terms) \
             .filter(
             or_(
@@ -473,21 +489,28 @@ def api_query_breach_terms():
             return jsonify({
                 "status": "success",
                 "count": 0,
-                "results": []
+                "report": "数据库中没有找到与关键词匹配的违约条款。"
             })
 
-        results = [
-            {
-                "partner_name": c.partner_name,
-                "breach_terms": c.breach_terms
-            } for c in contracts_found
+        # 在服务器端格式化为纯文本
+        report_lines = [
+            f"查询到 {len(contracts_found)} 条相关合同：\n"
         ]
+        for c in contracts_found:
+            report_lines.append(f"--- 合同相对方: {c.partner_name} ---")
+            report_lines.append(f"条款原文: {c.breach_terms}\n")
+
+        final_report = "\n".join(report_lines)
 
         return jsonify({
             "status": "success",
-            "count": len(results),
-            "results": results
+            "count": len(contracts_found),
+            "report": final_report  # 返回单一的纯文本报告
         })
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "count": 0,
+            "report": f"查询时发生数据库错误: {e}"
+        }), 500
