@@ -180,6 +180,7 @@ def internal_dashboard():
     categories = db.session.query(IpAsset.category).distinct().all()
 
     # --- 5. (V7 新增!) 获取 AI 嵌入网址 ---
+    # (这一行代码从“保险箱”WSGI 文件里读取你藏好的网址)
     tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_INTERNAL')
     if not tencent_embed_url:
         flash('AI 助手加载失败：未在服务器上配置 TENCENT_EMBED_URL_INTERNAL 环境变量。', 'danger')
@@ -474,10 +475,6 @@ def ip_detail(ip_id):
 
 # ==========================================================
 # --- (3) AI 专用 API 路由 (内控端) ---
-# =Settings:
-#   tense: present
-#   user_timezone: America/New_York
-#   llm_model: gemini-2.5-flash-preview-09-2025
 # ==========================================================
 
 # --- API 3.1: (V5 - 精简真实版) ---
