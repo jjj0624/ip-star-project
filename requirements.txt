@@ -5,3 +5,4 @@ Flask-WTF
 #mysqlclient
 python-dotenv
 PyMySQL
+Pillow
