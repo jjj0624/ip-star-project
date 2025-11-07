@@ -120,7 +120,7 @@ def save_picture(form_picture):
     return os.path.join('images', picture_fn)
 
 
-# 帮助函数：计算许可状态
+# 帮助函数：计算许可状态 (多处复用)
 def get_licensing_status(ip_asset):
     today = date.today()
     # 查询此 IP 是否有任何“生效中”的“独占”或“排他”许可
@@ -447,18 +447,19 @@ def ip_detail(ip_id):
     return render_template('ip_detail.html', ip=ip, title=ip.name)
 
 
-# --- (3) AI 专用 API 路由 ---
+# ==========================================================
+# --- (3) AI 专用 API 路由 (内控端) ---
+# ==========================================================
 
 # --- API 3.1: (V5 - 精简真实版) ---
 @bp.route('/api/get_report')
 def api_get_report():
     """
-    为 AI 提供 IP 点击量和即将到期合同的真实数据。
+    为 (内控端) AI 提供 IP 点击量和即将到期合同的真实数据。
     返回扁平化的纯文本。
     """
     try:
         # === 1. (真实) IP 点击量排行 ===
-        # (按 ip_id 分组, 统计 IpAnalytics 的点击次数)
         click_query = db.session.query(
             IpAsset.name,
             func.count(IpAnalytics.id).label('total_clicks')
@@ -522,7 +523,7 @@ def api_get_report():
 @bp.route('/api/query_breach_terms')
 def api_query_breach_terms():
     """
-    为 AI 提供合同违约条款的真实数据。
+    为 (内控端) AI 提供合同违约条款的真实数据。
     接受一个 'q' query 参数。
     返回扁平化的纯文本。
     """
@@ -536,7 +537,6 @@ def api_query_breach_terms():
 
     try:
         # (真实) 查询数据库
-        # 搜索“相对方名称”或“违约责任”字段
         search_query = f"%{query}%"
         results = Contract.query.filter(
             or_(
@@ -567,4 +567,99 @@ def api_query_breach_terms():
             "status": "error",
             "count": 0,
             "report": f"查询时发生内部错误: {e}"
+        }), 500
+
+
+# ==========================================================
+# --- (4) (新!) AI 专用 API 路由 (伙伴端) ---
+# ==========================================================
+
+# --- API 4.1: (V6 - 伙伴端) ---
+@bp.route('/api/get_licensable_ips')
+def api_get_licensable_ips():
+    """
+    为 (伙伴端) AI 提供当前所有“可授权”的 IP 列表。
+    返回扁平化的纯文本报告。
+    """
+    try:
+        today = date.today()
+
+        # 1. 找到所有当前 "不可许可" 的 IP ID
+        locked_ip_ids_query = db.session.query(Contract.ip_id).distinct().filter(
+            Contract.license_type.in_(['独占许可', '排他许可']),
+            Contract.term_start <= today,
+            Contract.term_end >= today
+        )
+        locked_ip_ids = [item[0] for item in locked_ip_ids_query.all()]
+
+        # 2. 查询所有可许可的 IP (不在上述列表中的)
+        licensable_ips = IpAsset.query.filter(
+            not_(IpAsset.id.in_(locked_ip_ids))
+        ).order_by(IpAsset.cooperation_count.desc()).all()
+
+        count = len(licensable_ips)
+        if count == 0:
+            report = "当前所有 IP 均处于独占或排他许可期，暂无可推荐的 IP。请稍后重试。"
+        else:
+            report_lines = [f"查询成功！以下是当前 {count} 个可授权合作的 IP 列表及其详情："]
+            for i, ip in enumerate(licensable_ips):
+                report_lines.append(f"\n{i + 1}. IP 名称: {ip.name}")
+                report_lines.append(f"   - 类别: {ip.category}")
+                report_lines.append(f"   - 商业价值: {ip.value_level} 级")
+                report_lines.append(f"   - 创作说明: {ip.description}")
+            report = "\n".join(report_lines)
+
+        return jsonify({
+            "status": "success",
+            "count": count,
+            "ips_report": report
+        })
+
+    except Exception as e:
+        print(f"Error in /api/get_licensable_ips: {e}")
+        return jsonify({
+            "status": "error",
+            "count": 0,
+            "ips_report": f"获取可授权 IP 列表时发生内部错误: {e}"
+        }), 500
+
+
+# --- API 4.2: (V6 - 伙伴端) ---
+@bp.route('/api/get_fee_guidance')
+def api_get_fee_guidance():
+    """
+    为 (伙伴端) AI 提供特定 IP 的“商业价值级别”，用于测算费用。
+    接受一个 'ip_name' query 参数。
+    """
+    query_name = request.args.get('ip_name')
+    if not query_name:
+        return jsonify({
+            "status": "error",
+            "ip_name": "",
+            "value_level": "未知"
+        }), 400
+
+    try:
+        # (真实) 查询数据库
+        ip = IpAsset.query.filter(func.lower(IpAsset.name) == func.lower(query_name)).first()
+
+        if not ip:
+            return jsonify({
+                "status": "error",
+                "ip_name": query_name,
+                "value_level": "未找到"
+            })
+
+        return jsonify({
+            "status": "success",
+            "ip_name": ip.name,
+            "value_level": ip.value_level  # 返回 "S", "A", "B", 或 "C"
+        })
+
+    except Exception as e:
+        print(f"Error in /api/get_fee_guidance: {e}")
+        return jsonify({
+            "status": "error",
+            "ip_name": query_name,
+            "value_level": f"内部错误: {e}"
         }), 500
