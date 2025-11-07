@@ -179,6 +179,11 @@ def internal_dashboard():
     # --- 4. 筛选下拉框数据 ---
     categories = db.session.query(IpAsset.category).distinct().all()
 
+    # --- 5. (V7 新增!) 获取 AI 嵌入网址 ---
+    tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_INTERNAL')
+    if not tencent_embed_url:
+        flash('AI 助手加载失败：未在服务器上配置 TENCENT_EMBED_URL_INTERNAL 环境变量。', 'danger')
+
     return render_template('internal_dashboard.html',
                            title='内控管理台',
                            # 表单
@@ -195,7 +200,9 @@ def internal_dashboard():
                            search_ip_name=ip_name_query,
                            search_ip_category=ip_category_query,
                            search_contract_ip=contract_ip_name,
-                           search_contract_partner=contract_partner
+                           search_contract_partner=contract_partner,
+                           # (V7 新增!)
+                           tencent_embed_url=tencent_embed_url
                            )
 
 
@@ -251,6 +258,9 @@ def add_ip():
     categories = db.session.query(IpAsset.category).distinct().all()
     contract_form.ip_id.choices = [(ip.id, ip.name) for ip in all_ips]
 
+    # (V7 新增!)
+    tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_INTERNAL')
+
     return render_template('internal_dashboard.html',
                            title='内控管理台',
                            ip_form=ip_form,  # (包含验证错误的表单)
@@ -260,7 +270,9 @@ def add_ip():
                            contracts=all_contracts,
                            categories=[c[0] for c in categories if c[0]],
                            search_ip_name='', search_ip_category='',
-                           search_contract_ip='', search_contract_partner=''
+                           search_contract_ip='', search_contract_partner='',
+                           # (V7 新增!)
+                           tencent_embed_url=tencent_embed_url
                            )
 
 
@@ -337,6 +349,9 @@ def add_contract():
     all_contracts = Contract.query.order_by(Contract.id.desc()).all()
     categories = db.session.query(IpAsset.category).distinct().all()
 
+    # (V7 新增!)
+    tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_INTERNAL')
+
     return render_template('internal_dashboard.html',
                            title='内控管理台',
                            ip_form=ip_form,
@@ -346,7 +361,9 @@ def add_contract():
                            contracts=all_contracts,
                            categories=[c[0] for c in categories if c[0]],
                            search_ip_name='', search_ip_category='',
-                           search_contract_ip='', search_contract_partner=''
+                           search_contract_ip='', search_contract_partner='',
+                           # (V7 新增!)
+                           tencent_embed_url=tencent_embed_url
                            )
 
 
@@ -411,6 +428,11 @@ def portal_dashboard():
     # (关键修改) 按 S, A, B, C 顺序硬编码
     value_levels = ['S', 'A', 'B', 'C']
 
+    # --- 6. (V7 新增!) 获取 AI 嵌入网址 ---
+    tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_PARTNER')
+    if not tencent_embed_url:
+        flash('AI 助手加载失败：未在服务器上配置 TENCENT_EMBED_URL_PARTNER 环境变量。', 'danger')
+
     return render_template('portal_dashboard.html',
                            title='IP 授权门户',
                            ips=licensable_ips,
@@ -419,7 +441,10 @@ def portal_dashboard():
                            value_levels=value_levels,
                            search_query=search_query,
                            selected_category=category_query,
-                           selected_level=level_query)
+                           selected_level=level_query,
+                           # (V7 新增!)
+                           tencent_embed_url=tencent_embed_url
+                           )
 
 
 # --- (2.1) 伙伴端：IP 详情页与点击跟踪 ---
@@ -449,6 +474,10 @@ def ip_detail(ip_id):
 
 # ==========================================================
 # --- (3) AI 专用 API 路由 (内控端) ---
+# =Settings:
+#   tense: present
+#   user_timezone: America/New_York
+#   llm_model: gemini-2.5-flash-preview-09-2025
 # ==========================================================
 
 # --- API 3.1: (V5 - 精简真实版) ---
@@ -571,7 +600,7 @@ def api_query_breach_terms():
 
 
 # ==========================================================
-# --- (4) (新!) AI 专用 API 路由 (伙伴端) ---
+# --- (4) AI 专用 API 路由 (伙伴端) ---
 # ==========================================================
 
 # --- API 4.1: (V6 - 伙伴端) ---
