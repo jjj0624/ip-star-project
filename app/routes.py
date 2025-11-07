@@ -1,24 +1,22 @@
 import os
 import secrets
+from datetime import date, timedelta
 from PIL import Image  # 用于图片处理
 from flask import (render_template, flash, redirect, url_for, request,
-                   Blueprint, abort, jsonify, current_app)
+                   Blueprint, abort, current_app, jsonify)
 from flask_login import current_user, login_user, logout_user, login_required
 from app import db
 from app.models import User, IpAsset, Contract, IpAnalytics
 from app.forms import LoginForm, RegistrationForm, IpAssetForm, ContractForm
-from sqlalchemy import not_, or_
-from datetime import date, timedelta
+from sqlalchemy import not_, or_, func, and_
+from werkzeug.utils import secure_filename
 from functools import wraps
-from werkzeug.utils import secure_filename  # 用于安全地获取文件名
-import json  # 确保导入 json
 
 # 创建一个蓝图
 bp = Blueprint('main', __name__)
 
 
-# --- 辅助装饰器 ---
-
+# --- 自定义装饰器 ---
 # 用于限制只有 'internal' 角色的用户才能访问
 def internal_required(f):
     @wraps(f)
@@ -41,53 +39,7 @@ def partner_required(f):
     return decorated_function
 
 
-# --- 辅助函数 ---
-
-def save_picture(form_picture):
-    """处理上传的图片文件：压缩、保存并返回文件名"""
-    random_hex = secrets.token_hex(8)
-    # 获取文件扩展名
-    _, f_ext = os.path.splitext(form_picture.filename)
-    picture_fn = random_hex + f_ext  # 随机文件名
-
-    # 构造保存路径
-    # current_app.root_path 是项目根目录 (ip_star_project)
-    # 我们需要用 os.path.join 来正确拼接路径
-    # app.root_path 在 app/__init__.py 之后是 app 文件夹
-    # current_app.root_path 指向 run.py 所在的目录
-    # 在 create_app 中 app = Flask(__name__)，app.root_path 指向 app 目录
-    # 修正：我们应该用 current_app.root_path 来定位 app 文件夹
-    picture_path = os.path.join(current_app.root_path, 'static/images', picture_fn)
-
-    # 压缩图片
-    output_size = (800, 800)  # 限制最大尺寸
-    i = Image.open(form_picture)
-    i.thumbnail(output_size)
-    i.save(picture_path)
-
-    # 返回相对路径，用于存储在数据库
-    return os.path.join('images', picture_fn).replace('\\', '/')  # 确保使用 /
-
-
-def get_licensing_status(ip):
-    """根据IP的合同计算其当前的许可状态"""
-    today = date.today()
-    # 检查是否存在任何"正在生效"的"独占"或"排他"许可
-    is_locked = db.session.query(Contract.id).filter(
-        Contract.ip_id == ip.id,
-        Contract.license_type.in_(['独占许可', '排他许可']),
-        Contract.term_start <= today,
-        Contract.term_end >= today
-    ).first()  # .first() 是一种优化，只要找到一个就立刻返回
-
-    if is_locked:
-        return "不可许可"
-    else:
-        return "可许可"
-
-
-# --- 首页与认证路由 ---
-
+# --- 首页与重定向 ---
 @bp.route('/')
 @bp.route('/index')
 @login_required
@@ -101,19 +53,23 @@ def index():
         return redirect(url_for('main.login'))
 
 
+# --- 认证路由 ---
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
+
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
         if user is None or not user.check_password(form.password.data):
             flash('无效的用户名或密码', 'danger')
             return redirect(url_for('main.login'))
+
         login_user(user, remember=form.remember_me.data)
         flash('登录成功！', 'success')
         return redirect(url_for('main.index'))
+
     return render_template('login.html', title='登录', form=form)
 
 
@@ -128,6 +84,7 @@ def logout():
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
+
     form = RegistrationForm()
     if form.validate_on_submit():
         user = User(username=form.username.data, role=form.role.data)
@@ -136,165 +93,265 @@ def register():
         db.session.commit()
         flash('恭喜，您已注册成功！请登录。', 'success')
         return redirect(url_for('main.login'))
+
     return render_template('register.html', title='注册', form=form)
 
 
 # --- (1) 内控端路由 ---
 
-@bp.route('/internal/dashboard')
+# 帮助函数：保存上传的图片
+def save_picture(form_picture):
+    # 生成随机文件名
+    random_hex = secrets.token_hex(8)
+    # 获取文件扩展名 (如 .png)
+    _, f_ext = os.path.splitext(form_picture.filename)
+    # 组合新文件名 (如 8a2b3c4d.png)
+    picture_fn = random_hex + f_ext
+    # 拼接保存的绝对路径 (app/static/images/...)
+    picture_path = os.path.join(current_app.root_path, 'static/images', picture_fn)
+
+    # 压缩图片并保存
+    output_size = (800, 800)  # 设置一个合理的尺寸
+    i = Image.open(form_picture)
+    i.thumbnail(output_size)
+    i.save(picture_path)
+
+    # 返回相对路径 (images/...)，用于存入数据库
+    return os.path.join('images', picture_fn)
+
+
+# 帮助函数：计算许可状态
+def get_licensing_status(ip_asset):
+    today = date.today()
+    # 查询此 IP 是否有任何“生效中”的“独占”或“排他”许可
+    active_exclusive_contract = Contract.query.filter(
+        Contract.ip_id == ip_asset.id,
+        Contract.license_type.in_(['独占许可', '排他许可']),
+        Contract.term_start <= today,
+        Contract.term_end >= today
+    ).first()
+
+    if active_exclusive_contract:
+        return "不可许可"
+    else:
+        return "可许可"
+
+
+@bp.route('/internal/dashboard', methods=['GET'])
 @login_required
 @internal_required
 def internal_dashboard():
-    # 准备表单
+    # --- 1. 表单初始化 ---
     ip_form = IpAssetForm()
     contract_form = ContractForm()
-    # 为合同表单的 IP 下拉列表填充选项
-    contract_form.ip_id.choices = [(ip.id, ip.name) for ip in IpAsset.query.order_by(IpAsset.name).all()]
+    # 动态填充合同表单中的 IP 下拉菜单
+    contract_form.ip_id.choices = [
+        (ip.id, ip.name) for ip in IpAsset.query.order_by(IpAsset.name).all()
+    ]
 
-    # --- IP 资产台账筛选 ---
+    # --- 2. IP 资产查询与筛选 ---
     ip_name_query = request.args.get('ip_name', '')
     ip_category_query = request.args.get('ip_category', '')
+
     ip_query = IpAsset.query
     if ip_name_query:
         ip_query = ip_query.filter(IpAsset.name.like(f'%{ip_name_query}%'))
     if ip_category_query:
         ip_query = ip_query.filter(IpAsset.category == ip_category_query)
-    all_ips_raw = ip_query.order_by(IpAsset.id.desc()).all()
-    # 动态计算 IP 状态
-    all_ips = []
-    for ip in all_ips_raw:
-        # 修正属性名，以匹配 internal_dashboard.html
-        ip.computed_status = get_licensing_status(ip)  # 动态添加属性
-        all_ips.append(ip)
 
-    # --- 合同台账筛选 ---
-    contract_ip_query = request.args.get('contract_ip', '')
-    contract_partner_query = request.args.get('contract_partner', '')
-    contract_query = Contract.query
-    if contract_ip_query:
-        # 通过 IP 名称反向查询
-        contract_query = contract_query.join(IpAsset).filter(IpAsset.name.like(f'%{contract_ip_query}%'))
-    if contract_partner_query:
-        contract_query = contract_query.filter(Contract.partner_name.like(f'%{contract_partner_query}%'))
+    all_ips = ip_query.order_by(IpAsset.id.desc()).all()
+
+    # (关键) 为每个 IP 计算其当前的许可状态
+    ip_statuses = {ip.id: get_licensing_status(ip) for ip in all_ips}
+
+    # --- 3. 合同台账查询与筛选 ---
+    contract_ip_name = request.args.get('contract_ip_name', '')
+    contract_partner = request.args.get('contract_partner', '')
+
+    contract_query = Contract.query.join(IpAsset)  # 关联 IP 表以便按名称搜索
+    if contract_ip_name:
+        contract_query = contract_query.filter(IpAsset.name.like(f'%{contract_ip_name}%'))
+    if contract_partner:
+        contract_query = contract_query.filter(Contract.partner_name.like(f'%{contract_partner}%'))
+
     all_contracts = contract_query.order_by(Contract.id.desc()).all()
 
-    # 获取所有唯一的类别用于筛选下拉框
-    categories = [c[0] for c in db.session.query(IpAsset.category).distinct().all() if c[0]]
+    # --- 4. 筛选下拉框数据 ---
+    categories = db.session.query(IpAsset.category).distinct().all()
 
     return render_template('internal_dashboard.html',
                            title='内控管理台',
-                           ips=all_ips,
-                           contracts=all_contracts,
-                           categories=categories,
+                           # 表单
                            ip_form=ip_form,
                            contract_form=contract_form,
+                           # IP 表格
+                           ips=all_ips,
+                           ip_statuses=ip_statuses,
+                           # 合同表格
+                           contracts=all_contracts,
+                           # 筛选数据
+                           categories=[c[0] for c in categories if c[0]],
+                           # 用于保持筛选框的值
                            search_ip_name=ip_name_query,
                            search_ip_category=ip_category_query,
-                           search_contract_ip=contract_ip_query,
-                           search_contract_partner=contract_partner_query)
+                           search_contract_ip=contract_ip_name,
+                           search_contract_partner=contract_partner
+                           )
 
 
-@bp.route('/internal/ip/add', methods=['POST'])
+# --- (1.1) 内控端：添加 IP ---
+@bp.route('/ip/add', methods=['POST'])
 @login_required
 @internal_required
 def add_ip():
-    form = IpAssetForm()
-    if form.validate_on_submit():
-        # 处理图片上传
-        picture_file_path = 'images/default.png'  # 默认图片
-        if form.image_file.data:
-            # 修正：save_picture 应该在 app/routes.py 中定义
-            picture_file_path = save_picture(form.image_file.data)
+    # (这个路由只接受 POST，所以我们重新创建表单)
+    ip_form = IpAssetForm()
+    contract_form = ContractForm()  # (虽然不用，但模板需要它)
+
+    if ip_form.validate_on_submit():
+        # (关键) 处理图片上传
+        if ip_form.image_file.data:
+            image_db_path = save_picture(ip_form.image_file.data)
+        else:
+            image_db_path = None  # 或者一个默认图片路径
 
         new_ip = IpAsset(
-            name=form.name.data,
-            category=form.category.data,
-            description=form.description.data,
-            image_url=picture_file_path,  # 存储相对路径
-            author=form.author.data,
-            ownership=form.ownership.data,
-            reg_number=form.reg_number.data,
-            reg_date=form.reg_date.data,
-            license_type_options=form.license_type_options.data,
-            value_level=form.value_level.data
-            # internal_status 字段在 V3 中已移除
-            # cooperation_count 默认为 0
+            name=ip_form.name.data,
+            category=ip_form.category.data,
+            description=ip_form.description.data,
+            image_url=image_db_path,  # (关键) 保存相对路径
+            author=ip_form.author.data,
+            ownership=ip_form.ownership.data,
+            reg_number=ip_form.reg_number.data,
+            reg_date=ip_form.reg_date.data,
+            license_type_options=ip_form.license_type_options.data,
+            value_level=ip_form.value_level.data
         )
         try:
             db.session.add(new_ip)
             db.session.commit()
-            flash('新 IP 资产添加成功！', 'success')
+            flash(f'IP 资产 "{new_ip.name}" 添加成功！', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'添加失败，发生错误：{e}', 'danger')
-    else:
-        # 处理表单验证失败
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f'{getattr(form, field).label.text} 字段错误: {error}', 'danger')
-    return redirect(url_for('main.internal_dashboard'))
+            # (处理唯一键冲突，比如登记号重复)
+            if "UNIQUE constraint failed" in str(e) or "Duplicate entry" in str(e):
+                flash(f'添加失败：登记号 "{new_ip.reg_number}" 可能已经存在。', 'danger')
+            else:
+                flash(f'添加 IP 时发生未知错误: {e}', 'danger')
+
+        return redirect(url_for('main.internal_dashboard'))
+
+    # 如果表单验证失败，则重新加载仪表盘
+    # (我们必须重新获取所有数据，否则模板会崩溃)
+    flash('添加 IP 失败，请检查表单中的错误。', 'danger')
+    # (重新加载仪表盘所需的所有数据)
+    all_ips = IpAsset.query.order_by(IpAsset.id.desc()).all()
+    ip_statuses = {ip.id: get_licensing_status(ip) for ip in all_ips}
+    all_contracts = Contract.query.order_by(Contract.id.desc()).all()
+    categories = db.session.query(IpAsset.category).distinct().all()
+    contract_form.ip_id.choices = [(ip.id, ip.name) for ip in all_ips]
+
+    return render_template('internal_dashboard.html',
+                           title='内控管理台',
+                           ip_form=ip_form,  # (包含验证错误的表单)
+                           contract_form=contract_form,
+                           ips=all_ips,
+                           ip_statuses=ip_statuses,
+                           contracts=all_contracts,
+                           categories=[c[0] for c in categories if c[0]],
+                           search_ip_name='', search_ip_category='',
+                           search_contract_ip='', search_contract_partner=''
+                           )
 
 
-@bp.route('/internal/contract/add', methods=['POST'])
-@login_required
-@internal_required
-def add_contract():
-    form = ContractForm()
-    # 再次动态填充
-    form.ip_id.choices = [(ip.id, ip.name) for ip in IpAsset.query.order_by(IpAsset.name).all()]
-
-    if form.validate_on_submit():
-        new_contract = Contract(
-            ip_id=form.ip_id.data,
-            partner_name=form.partner_name.data,
-            region=form.region.data,
-            media=form.media.data,
-            usage_type=form.usage_type.data,
-            license_type=form.license_type.data,
-            term_start=form.term_start.data,
-            term_end=form.term_end.data,
-            fee_standard=form.fee_standard.data,
-            payment_cycle=form.payment_cycle.data,
-            breach_terms=form.breach_terms.data
-        )
-        try:
-            db.session.add(new_contract)
-            db.session.commit()
-            flash('新合同添加成功！', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'添加失败，发生错误：{e}', 'danger')
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f'{getattr(form, field).label.text} 字段错误: {error}', 'danger')
-    return redirect(url_for('main.internal_dashboard'))
-
-
-@bp.route('/internal/ip/delete/<int:ip_id>', methods=['POST'])
+# --- (1.2) 内控端：删除 IP ---
+@bp.route('/ip/delete/<int:ip_id>', methods=['POST'])
 @login_required
 @internal_required
 def delete_ip(ip_id):
     ip_to_delete = IpAsset.query.get_or_404(ip_id)
-    try:
-        # 检查关联合同
-        if ip_to_delete.contracts:
-            flash('删除失败！该 IP 尚有关联合同，请先删除相关合同。', 'danger')
-            return redirect(url_for('main.internal_dashboard'))
 
-        # (如果需要，在这里添加删除 app/static/images 中
-        # 的旧图片文件的逻辑)
+    # (安全检查：如果 IP 仍有关联合同，则阻止删除)
+    if ip_to_delete.contracts:
+        flash(f'无法删除 IP "{ip_to_delete.name}"，因为它仍有关联合同。请先删除相关合同。', 'danger')
+        return redirect(url_for('main.internal_dashboard'))
+
+    try:
+        # (删除图片文件 - 可选但推荐)
+        if ip_to_delete.image_url:
+            image_path = os.path.join(current_app.root_path, 'static', ip_to_delete.image_url)
+            if os.path.exists(image_path):
+                os.remove(image_path)
 
         db.session.delete(ip_to_delete)
         db.session.commit()
-        flash('IP 资产删除成功。', 'success')
+        flash(f'IP 资产 "{ip_to_delete.name}" 已被删除。', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'删除失败，发生错误：{e}', 'danger')
+        flash(f'删除 IP 时发生错误: {e}', 'danger')
+
     return redirect(url_for('main.internal_dashboard'))
 
 
-@bp.route('/internal/contract/delete/<int:contract_id>', methods=['POST'])
+# --- (1.3) 内控端：添加合同 ---
+@bp.route('/contract/add', methods=['POST'])
+@login_required
+@internal_required
+def add_contract():
+    ip_form = IpAssetForm()  # (虽然不用，但模板需要它)
+    contract_form = ContractForm()
+    # (关键) 必须在验证之前再次填充 IP 下拉菜单
+    contract_form.ip_id.choices = [
+        (ip.id, ip.name) for ip in IpAsset.query.order_by(IpAsset.name).all()
+    ]
+
+    if contract_form.validate_on_submit():
+        new_contract = Contract(
+            ip_id=contract_form.ip_id.data,
+            partner_name=contract_form.partner_name.data,
+            region=contract_form.region.data,
+            media=contract_form.media.data,
+            usage_type=contract_form.usage_type.data,
+            license_type=contract_form.license_type.data,
+            term_start=contract_form.term_start.data,
+            term_end=contract_form.term_end.data,
+            fee_standard=contract_form.fee_standard.data,
+            payment_cycle=contract_form.payment_cycle.data,
+            breach_terms=contract_form.breach_terms.data
+        )
+        try:
+            db.session.add(new_contract)
+            db.session.commit()
+            flash(f'为 "{new_contract.ip_asset.name}" 添加的新合同（ID: {new_contract.id}）成功！', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'添加合同时发生未知错误: {e}', 'danger')
+
+        return redirect(url_for('main.internal_dashboard'))
+
+    # 如果表单验证失败
+    flash('添加合同失败，请检查表单中的错误。', 'danger')
+    # (重新加载仪表盘所需的所有数据)
+    all_ips = IpAsset.query.order_by(IpAsset.id.desc()).all()
+    ip_statuses = {ip.id: get_licensing_status(ip) for ip in all_ips}
+    all_contracts = Contract.query.order_by(Contract.id.desc()).all()
+    categories = db.session.query(IpAsset.category).distinct().all()
+
+    return render_template('internal_dashboard.html',
+                           title='内控管理台',
+                           ip_form=ip_form,
+                           contract_form=contract_form,  # (包含验证错误的表单)
+                           ips=all_ips,
+                           ip_statuses=ip_statuses,
+                           contracts=all_contracts,
+                           categories=[c[0] for c in categories if c[0]],
+                           search_ip_name='', search_ip_category='',
+                           search_contract_ip='', search_contract_partner=''
+                           )
+
+
+# --- (1.4) 内控端：删除合同 ---
+@bp.route('/contract/delete/<int:contract_id>', methods=['POST'])
 @login_required
 @internal_required
 def delete_contract(contract_id):
@@ -302,20 +359,20 @@ def delete_contract(contract_id):
     try:
         db.session.delete(contract_to_delete)
         db.session.commit()
-        flash('合同删除成功。', 'success')
+        flash(f'合同（ID: {contract_to_delete.id}）已被删除。', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'删除失败，发生错误：{e}', 'danger')
+        flash(f'删除合同时发生错误: {e}', 'danger')
+
     return redirect(url_for('main.internal_dashboard'))
 
 
-# --- (2) 伙伴端路由 ---
-
+# --- (2) 伙伴端路由 (核心逻辑) ---
 @bp.route('/portal/dashboard')
 @login_required
 @partner_required
 def portal_dashboard():
-    # --- 获取所有筛选参数 ---
+    # --- 新增：获取所有筛选参数 ---
     search_query = request.args.get('q', '')
     category_query = request.args.get('category', '')
     level_query = request.args.get('value_level', '')
@@ -335,9 +392,9 @@ def portal_dashboard():
         not_(IpAsset.id.in_(locked_ip_ids))
     )
 
-    # 3. --- 应用所有筛选条件 ---
+    # 3. --- 新增：应用所有筛选条件 ---
     if search_query:
-        # 只搜索 IP 名称
+        # (关键修改) 只搜索 IP 名称
         base_query = base_query.filter(IpAsset.name.like(f'%{search_query}%'))
 
     if category_query:
@@ -349,15 +406,15 @@ def portal_dashboard():
     # 4. 按合作次数排序并执行
     licensable_ips = base_query.order_by(IpAsset.cooperation_count.desc()).all()
 
-    # 5. --- 获取用于下拉框的选项 ---
+    # 5. --- 新增：获取用于下拉框的选项 ---
     categories = [c[0] for c in db.session.query(IpAsset.category).distinct().filter(IpAsset.category != None)]
-    # 固定商业价值的顺序
+    # (关键修改) 按 S, A, B, C 顺序硬编码
     value_levels = ['S', 'A', 'B', 'C']
 
     return render_template('portal_dashboard.html',
                            title='IP 授权门户',
                            ips=licensable_ips,
-                           # --- 把选项和当前值传给模板 ---
+                           # --- 新增：把选项和当前值传给模板 ---
                            categories=categories,
                            value_levels=value_levels,
                            search_query=search_query,
@@ -365,13 +422,20 @@ def portal_dashboard():
                            selected_level=level_query)
 
 
+# --- (2.1) 伙伴端：IP 详情页与点击跟踪 ---
 @bp.route('/portal/ip/<int:ip_id>')
 @login_required
 @partner_required
 def ip_detail(ip_id):
     ip = IpAsset.query.get_or_404(ip_id)
 
-    # 关键：把点击统计逻辑放在这里！
+    # (安全检查：防止伙伴通过 URL 访问不可许可的 IP)
+    status = get_licensing_status(ip)
+    if status == "不可许可":
+        flash("您所访问的 IP 当前处于独占或排他许可期，暂不可用。", "warning")
+        return redirect(url_for('main.portal_dashboard'))
+
+    # 记录点击
     try:
         new_click = IpAnalytics(ip_id=ip.id, user_id=current_user.id)
         db.session.add(new_click)
@@ -384,133 +448,123 @@ def ip_detail(ip_id):
 
 
 # --- (3) AI 专用 API 路由 ---
-# 这些路由由腾讯云智能体在后台调用
 
+# --- API 3.1: (V5 - 精简真实版) ---
 @bp.route('/api/get_report')
 def api_get_report():
     """
-    (内控端) AI工具：一键生成报表
-    V3 版：返回扁平化的纯文本，以匹配腾讯云的“三栏”配置。
+    为 AI 提供 IP 点击量和即将到期合同的真实数据。
+    返回扁平化的纯文本。
     """
     try:
-        # --- 1. 模拟IP点击量数据 ---
-        ip_clicks_data = [
-            {"name": "墨卿", "clicks": 120},
-            {"name": "星核仔", "clicks": 95},
-            {"name": "林小满", "clicks": 80},
-        ]
-        # 在服务器端格式化为纯文本
-        ip_clicks_report = "IP 点击量排行 (模拟数据):\n" + "\n".join(
-            [f"- {item['name']}: {item['clicks']} 次点击" for item in ip_clicks_data]
-        )
+        # === 1. (真实) IP 点击量排行 ===
+        # (按 ip_id 分组, 统计 IpAnalytics 的点击次数)
+        click_query = db.session.query(
+            IpAsset.name,
+            func.count(IpAnalytics.id).label('total_clicks')
+        ).join(
+            IpAnalytics, IpAsset.id == IpAnalytics.ip_id
+        ).group_by(
+            IpAsset.name
+        ).order_by(
+            func.count(IpAnalytics.id).desc()
+        ).limit(5)  # 只显示前 5 名
 
-        # --- 2. 模拟IP许可收益排行 ---
-        revenue_data = [
-            {"name": "墨卿", "revenue": "约 250,000 元 (含分成)"},
-            {"name": "星核仔", "revenue": "800,000 元 (保底)"},
-            {"name": "蓝星豆", "revenue": "500,000 元 (保底)"},
-        ]
-        revenue_report = "IP 许可收益排行 (模拟数据):\n" + "\n".join(
-            [f"- {item['name']}: {item['revenue']}" for item in revenue_data]
-        )
+        clicks_results = click_query.all()
 
-        # --- 3. 真实查询：在一个季度内即将到期的IP ---
+        if not clicks_results:
+            clicks_report = "IP 点击量报表 (真实数据):\n- 暂无点击数据。"
+        else:
+            clicks_report_lines = ["IP 点击量报表 (真实数据):"]
+            for name, clicks in clicks_results:
+                clicks_report_lines.append(f"- {name}: {clicks} 次点击")
+            clicks_report = "\n".join(clicks_report_lines)
+
+        # === 2. (真实) 90天内即将到期的合同 ===
         today = date.today()
         ninety_days_later = today + timedelta(days=90)
-        expiring_contracts = db.session.query(Contract.partner_name, IpAsset.name, Contract.term_end) \
-            .join(IpAsset, Contract.ip_id == IpAsset.id) \
-            .filter(
+
+        expiring_query = Contract.query.join(IpAsset).filter(
             Contract.term_end >= today,
             Contract.term_end <= ninety_days_later
-        ).all()
+        ).order_by(Contract.term_end.asc())
 
-        if expiring_contracts:
-            expiring_report = "90天内即将到期的合同 (真实数据):\n" + "\n".join(
-                [f"- {c.partner_name} (IP: {c.name}) - 到期日: {c.term_end.strftime('%Y-%m-%d')}"
-                 for c in expiring_contracts]
-            )
+        expiring_results = expiring_query.all()
+
+        if not expiring_results:
+            expiring_report = "90天内即将到期的合同报表 (真实数据):\n- 90天内没有即将到期的合同。"
         else:
-            expiring_report = "90天内没有即将到期的合同。"
+            expiring_report_lines = ["90天内即将到期的合同报表 (真实数据):"]
+            for contract in expiring_results:
+                expiring_report_lines.append(
+                    f"- 相对方: {contract.partner_name} (IP: {contract.ip_asset.name}) - 到期日: {contract.term_end.strftime('%Y-%m-%d')}"
+                )
+            expiring_report = "\n".join(expiring_report_lines)
 
-        # --- 4. 模拟：一个月内需要付费的公司 ---
-        payments_data = [
-            {"partner": "晨天文具制造有限公司", "due_date": "2025-11-15", "amount": "约 75,000 元 (第二期)"},
-            {"partner": "宇溯游戏开发有限公司", "due_date": "2025-11-20", "amount": "季度流水分成"},
-        ]
-        payments_due_report = "30天内需要付费的公司 (模拟数据):\n" + "\n".join(
-            [f"- {item['partner']} (付款日: {item['due_date']}) - 金额: {item['amount']}" for item in payments_data]
-        )
-
-        # 返回“扁平”的 JSON，只包含纯文本
+        # === 3. (V5) 成功返回 ===
         return jsonify({
             "status": "success",
-            "ip_clicks_report": ip_clicks_report,
-            "revenue_report": revenue_report,
-            "expiring_report": expiring_report,
-            "payments_due_report": payments_due_report
+            "ip_clicks_report": clicks_report,  # 真实
+            "expiring_report": expiring_report  # 真实
         })
 
     except Exception as e:
-        # 出错时也返回扁平的 error
+        print(f"Error in /api/get_report: {e}")
+        # (V5) 失败返回
         return jsonify({
             "status": "error",
-            "ip_clicks_report": f"生成失败: {e}",
-            "revenue_report": f"生成失败: {e}",
-            "expiring_report": f"生成失败: {e}",
-            "payments_due_report": f"生成失败: {e}"
+            "ip_clicks_report": "生成报表时发生内部错误。",
+            "expiring_report": "生成报表时发生内部错误。"
         }), 500
 
 
+# --- API 3.2: (V2 - 纯文本版) ---
 @bp.route('/api/query_breach_terms')
 def api_query_breach_terms():
     """
-    (内控端) AI工具：对方违约急救指南
-    V3 版：同样返回“扁平”的纯文本，以匹配腾讯云的“三栏”配置。
+    为 AI 提供合同违约条款的真实数据。
+    接受一个 'q' query 参数。
+    返回扁平化的纯文本。
     """
-    query = request.args.get('q', '')
-
+    query = request.args.get('q')
     if not query:
         return jsonify({
             "status": "error",
-            "report": "查询失败，必须提供关键词 (参数 'q')。"
+            "count": 0,
+            "report": "查询失败：您必须提供一个查询关键词 (q)。"
         }), 400
 
     try:
-        search_term = f'%{query}%'
-        contracts_found = db.session.query(Contract.partner_name, Contract.breach_terms) \
-            .filter(
+        # (真实) 查询数据库
+        # 搜索“相对方名称”或“违约责任”字段
+        search_query = f"%{query}%"
+        results = Contract.query.filter(
             or_(
-                Contract.partner_name.like(search_term),
-                Contract.breach_terms.like(search_term)
+                Contract.partner_name.like(search_query),
+                Contract.breach_terms.like(search_query)
             )
         ).all()
 
-        if not contracts_found:
-            return jsonify({
-                "status": "success",
-                "count": 0,
-                "report": "数据库中没有找到与关键词匹配的违约条款。"
-            })
-
-        # 在服务器端格式化为纯文本
-        report_lines = [
-            f"查询到 {len(contracts_found)} 条相关合同：\n"
-        ]
-        for c in contracts_found:
-            report_lines.append(f"--- 合同相对方: {c.partner_name} ---")
-            report_lines.append(f"条款原文: {c.breach_terms}\n")
-
-        final_report = "\n".join(report_lines)
+        count = len(results)
+        if count == 0:
+            report = f"数据库查询报告：\n- 未找到与“{query}”相关的合同条款。"
+        else:
+            report_lines = [f"数据库查询报告：\n- 找到 {count} 条与“{query}”相关的合同条款："]
+            for i, contract in enumerate(results):
+                report_lines.append(f"\n{i + 1}. 相对方: {contract.partner_name} (合同 ID: {contract.id})")
+                report_lines.append(f"   相关条款: {contract.breach_terms}")
+            report = "\n".join(report_lines)
 
         return jsonify({
             "status": "success",
-            "count": len(contracts_found),
-            "report": final_report  # 返回单一的纯文本报告
+            "count": count,
+            "report": report
         })
 
     except Exception as e:
+        print(f"Error in /api/query_breach_terms: {e}")
         return jsonify({
             "status": "error",
             "count": 0,
-            "report": f"查询时发生数据库错误: {e}"
+            "report": f"查询时发生内部错误: {e}"
         }), 500
