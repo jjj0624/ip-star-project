@@ -1,93 +1,102 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h2>{{ title }}</h2>
-    <p>欢迎, {{ current_user.username }}。探索可合作的 IP 形象。</p>
+    <div class="text-center mb-5">
+        <h2 class="fw-bold">{{ title }}</h2>
+        <p class="text-muted">欢迎, {{ current_user.username }}。探索可合作的 IP 形象。</p>
+    </div>
 
-    <!-- 筛选表单 (已更新) -->
-    <div class="card my-4">
-        <div class="card-body bg-light">
+    <div class="card my-4 shadow-sm border-0">
+        <div class="card-body bg-light rounded">
             <form method="GET" action="{{ url_for('main.portal_dashboard') }}">
                 <div class="row g-3">
-                    <!-- 关键词搜索 -->
                     <div class="col-md-4">
-                        <label for="q" class="form-label">IP 名称</label> <!-- (已修改) -->
-                        <input type="text" class="form-control" id="q" name="q" value="{{ search_query or '' }}"> <!-- (已修改) -->
+                        <label class="form-label fw-bold">IP 名称</label>
+                        <input type="text" class="form-control" name="q" value="{{ search_query or '' }}" placeholder="输入关键词...">
                     </div>
-                    <!-- 按类别筛选 -->
                     <div class="col-md-3">
-                        <label for="category" class="form-label">IP 类别</label>
-                        <select class="form-select" id="category" name="category">
+                        <label class="form-label fw-bold">类别</label>
+                        <select class="form-select" name="category">
                             <option value="">所有类别</option>
                             {% for category in categories %}
-                                <option value="{{ category }}" {% if category == selected_category %}selected{% endif %}>
-                                    {{ category }}
-                                </option>
+                                <option value="{{ category }}" {% if category == selected_category %}selected{% endif %}>{{ category }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <!-- 按等级筛选 -->
                     <div class="col-md-3">
-                        <label for="value_level" class="form-label">商业价值</label>
-                        <select class="form-select" id="value_level" name="value_level">
+                        <label class="form-label fw-bold">商业价值</label>
+                        <select class="form-select" name="value_level">
                             <option value="">所有等级</option>
-                            {% for level in value_levels %} <!-- (已修改) 保证 S,A,B,C 顺序 -->
-                                <option value="{{ level }}" {% if level == selected_level %}selected{% endif %}>
-                                    {{ level }} 级
-                                </option>
+                            {% for level in value_levels %}
+                                <option value="{{ level }}" {% if level == selected_level %}selected{% endif %}>{{ level }} 级</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <!-- 按钮 -->
                     <div class="col-md-2 align-self-end">
-                        <button type="submit" class="btn btn-primary w-100">查询</button>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">🔍 筛选</button>
                     </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- IP 形象可视化展示 -->
-    <div class="row row-cols-1 row-cols-md-4 g-4"> <!-- (已修改) 4 列 -->
+    <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
         {% for ip in ips %}
             <div class="col">
-                <!-- 引用可复用的卡片模板 -->
-                {% include '_ip_card.html' %}
+                <div class="card h-100 shadow-sm border-0 position-relative overflow-hidden ip-card">
+
+                    {% set status = ip_statuses.get(ip.id, '未知') %}
+                    {% if '不可许可' in status %}
+                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+                             style="background: rgba(0,0,0,0.6); z-index: 10; opacity: 0; transition: opacity 0.3s;"
+                             onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                            <div class="text-center text-white p-3">
+                                <h5 class="fw-bold">暂时无法许可</h5>
+                                <p class="small mb-0">该 IP 当前已有独占合作</p>
+                                <p class="small">请联系商务深入沟通</p>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" alt="{{ ip.name }}" style="height: 250px; object-fit: cover;">
+
+                    <div class="card-body text-center">
+                        <h5 class="card-title fw-bold mb-1">{{ ip.name }}</h5>
+                        <p class="text-muted small mb-2">{{ ip.category }} | {{ ip.value_level }}级</p>
+
+                        {% if '不可许可' in status %}
+                            <span class="badge bg-secondary">暂时锁定</span>
+                        {% elif '以外' in status %}
+                            <span class="badge bg-warning text-dark">区域受限</span>
+                        {% else %}
+                            <span class="badge bg-success">可合作</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="card-footer bg-white border-0 text-center pb-3">
+                        <a href="{{ url_for('main.ip_detail', ip_id=ip.id, q=search_query, category=selected_category, value_level=selected_level) }}"
+                           class="btn btn-outline-primary rounded-pill px-4">查看详情</a>
+                    </div>
+                </div>
             </div>
         {% else %}
-            <div class="col-12">
-                <p class="text-center text-muted">没有找到符合条件的 IP 形象。</p>
+            <div class="col-12 py-5">
+                <div class="text-center text-muted">
+                    <i class="bi bi-inbox display-4"></i>
+                    <p class="mt-3">没有找到符合条件的 IP 形象。</p>
+                </div>
             </div>
         {% endfor %}
     </div>
 
-    <!-- ########## (V7 - 跳转按钮版) AI 助手 ########## -->
     <div class="mt-5 pt-5 text-center">
         <hr>
-        <h2 class="mb-4">IP STAR 伙伴合作顾问</h2>
+        <h2 class="mb-4 text-primary">IP STAR 伙伴合作顾问</h2>
         {% if tencent_embed_url %}
-            <!-- 这是一个“跳转”按钮，它会打开一个新标签页 -->
-            <a href="{{ tencent_embed_url }}"
-               class="btn btn-primary btn-lg shadow-lg"
-               target="_blank"
-               rel="noopener noreferrer">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-robot me-2" viewBox="0 0 16 16">
-                    <path d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5M3 8.062C3 6.76 4.235 5.765 5.53 5.5S8.1 5.765 9 6.5s1.235.735 2.53.5 2.53-1.03 2.53-2.332V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2.732c0 1.302 1.235 2.332 2.53 2.332s2.53-.735 3.53-.5c.995.23 2.23.23 3.53-.5.78-.18 1.405-.638 1.94-1.284a1 1 0 0 1 1.487 1.332c-.538.647-1.21.93-1.94 1.116-.3.04-.6.06-.9.06-.605 0-1.16-.06-1.65-.17C9.444 7.29 8.29 7.005 7 7.005s-2.444.285-3.53.79C2.7 8.1 2 8.7 2 9.5v.062c0 .8.7 1.438 1.53 1.828C4.556 11.71 5.71 12.005 7 12.005s2.444-.285 3.53-.79c.83-.39 1.53-1.028 1.53-1.828V9.5c0-.8-.7-1.438-1.53-1.828C9.444 7.29 8.29 7.005 7 7.005s-2.444.285-3.53.79C2.7 8.1 2 8.7 2 9.5v.062Z"/>
-                    <path d="M12.5 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3.5 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"/>
-                    <path d="M11 5a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v1a1 1 0 0 1-1 1M5 5a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v1a1 1 0 0 1-1 1"/>
-                </svg>
-                前往 伙伴合作顾问 聊天
+            <a href="{{ tencent_embed_url }}" class="btn btn-primary btn-lg shadow-lg rounded-pill px-5" target="_blank">
+                💡 前往 伙伴顾问 聊天
             </a>
-            <p class="text-muted mt-3">（这将在一个新的标签页中打开腾讯云 AI 助手）</p>
-
-        {% else %}
-            <!-- 如果 URL 加载失败 (例如 WSGI 里的环境变量没配对) -->
-            <div class="alert alert-danger" role="alert">
-                <strong>AI 助手加载失败！</strong><br>
-                未能从服务器获取 AI 嵌入网址 (TENCENT_EMBED_URL_PARTNER)。请检查 PythonAnywhere 上的 WSGI 配置文件。
-            </div>
+            <p class="text-muted mt-2 small">获取专业推荐与费用测算</p>
         {% endif %}
     </div>
-    <!-- ########## AI 助手嵌入结束 ########## -->
-
 {% endblock %}

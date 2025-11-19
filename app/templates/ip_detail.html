@@ -1,32 +1,64 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="row">
-        <div class="col-md-6">
-            <img src="{{ url_for('static', filename=ip.image_url) }}" class="img-fluid rounded" alt="{{ ip.name }}">
-        </div>
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow-lg border-0 overflow-hidden">
+                <div class="row g-0">
+                    <div class="col-md-5 bg-light d-flex align-items-center justify-content-center p-3">
+                        <img src="{{ url_for('static', filename=ip.image_url) }}" class="img-fluid rounded shadow-sm" alt="{{ ip.name }}" style="max-height: 400px;">
+                    </div>
 
-        <div class="col-md-6">
-            <h2>{{ ip.name }}</h2>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item">
-                    <strong>IP 类别:</strong> {{ ip.category }}
-                </li>
-                <li class="list-group-item">
-                    <strong>商业价值:</strong> {{ ip.value_level }} 级
-                </li>
-                <li class="list-group-item">
-                    <strong>作者:</strong> {{ ip.author }}
-                </li>
-                <li class="list-group-item">
-                    <strong>登记号:</strong> {{ ip.reg_number }}
-                </li>
-                <li class="list-group-item">
-                    <strong>创作说明:</strong>
-                    <p>{{ ip.description }}</p>
-                </li>
-            </ul>
-            <a href="{{ url_for('main.portal_dashboard') }}" class="btn btn-secondary mt-3">返回列表</a>
+                    <div class="col-md-7">
+                        <div class="card-body p-4 h-100 d-flex flex-column">
+                            <div class="mb-auto">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h1 class="fw-bold text-primary">{{ ip.name }}</h1>
+                                    <span class="badge bg-dark fs-6">{{ ip.value_level }} 级资产</span>
+                                </div>
+
+                                <div class="mb-3">
+                                    <span class="badge bg-info text-dark me-2">{{ ip.category }}</span>
+                                    <span class="text-muted"><i class="bi bi-person"></i> {{ ip.author }}</span>
+                                </div>
+
+                                <p class="lead fs-6 text-secondary">{{ ip.description }}</p>
+
+                                <hr class="my-4">
+
+                                <div class="mb-3">
+                                    <strong>登记号：</strong> <span class="font-monospace">{{ ip.reg_number }}</span>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>当前状态：</strong>
+                                    {% if '不可许可' in status %}
+                                        <span class="text-danger fw-bold"><i class="bi bi-lock-fill"></i> {{ status }}</span>
+                                    {% elif '以外' in status %}
+                                        <span class="text-warning fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> {{ status }}</span>
+                                    {% else %}
+                                        <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> {{ status }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <a href="{{ url_for('main.portal_dashboard', q=prev_q, category=prev_cat, value_level=prev_lvl) }}"
+                                   class="btn btn-outline-secondary rounded-pill px-4">
+                                    <i class="bi bi-arrow-left"></i> 返回列表
+                                </a>
+
+                                {% if '不可许可' not in status %}
+                                    <button class="btn btn-primary rounded-pill px-4 float-end">立即咨询合作</button>
+                                {% else %}
+                                    <button class="btn btn-secondary rounded-pill px-4 float-end" disabled>暂无法合作</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+</div>
 {% endblock %}
