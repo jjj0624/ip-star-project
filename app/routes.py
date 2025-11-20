@@ -49,15 +49,13 @@ def save_picture(form_picture):
     return os.path.join('images', picture_fn).replace('\\', '/')
 
 
-# [新功能] 自动评估 IP 商业价值
+# [自动评估 IP 商业价值]
 def update_ip_value_level(ip_id):
     ip = IpAsset.query.get(ip_id)
     if not ip:
         return
-    # 统计该 IP 的合同数量
     contract_count = Contract.query.filter_by(ip_id=ip_id).count()
 
-    # 评级规则：0-1: C, 2-3: B, 4-5: A, 6+: S
     if contract_count >= 6:
         new_level = 'S'
     elif contract_count >= 4:
@@ -69,11 +67,10 @@ def update_ip_value_level(ip_id):
 
     if ip.value_level != new_level:
         ip.value_level = new_level
-        # 这里不 commit，由调用方 commit
         print(f"IP {ip.name} 商业价值已自动更新为 {new_level} (合同数: {contract_count})")
 
 
-# [新功能] 升级版许可状态判断 (支持地域)
+# [关键修改] 升级版许可状态判断
 def get_licensing_status(ip_asset):
     today = date.today()
     # 查找所有生效的独占/排他合同
@@ -90,9 +87,10 @@ def get_licensing_status(ip_asset):
     # 如果存在限制性合同，检查地域
     regions = [c.region for c in active_contracts if c.region]
 
-    # 如果有合同没有明确地域，或者涵盖了“全球”、“全国”，则视为完全不可许可
     for r in regions:
-        if "全球" in r or "全国" in r or "中国大陆" in r:  # 简单判断
+        # [修改点] 只有 "全球" 视为完全不可许可
+        # "全国" 和 "中国大陆" 现在会落入下方的 "可在...以外许可"
+        if "全球" in r:
             return "不可许可"
 
     if regions:
@@ -100,6 +98,7 @@ def get_licensing_status(ip_asset):
         unique_regions = list(set(regions))
         return f"可在 {'、'.join(unique_regions)} 以外许可"
 
+    # 如果有独占合同但没写地域，默认锁死
     return "不可许可"
 
 
@@ -189,12 +188,10 @@ def internal_dashboard():
     categories = [c[0] for c in db.session.query(IpAsset.category).distinct().all() if c[0]]
     tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_INTERNAL')
 
-    # --- [新功能] 数据可视化准备 ---
-    # 1. IP 类别占比 (Pie)
+    # 数据可视化
     cat_stats = db.session.query(IpAsset.category, func.count(IpAsset.id)).group_by(IpAsset.category).all()
     pie_data = [{'name': c[0] or '未分类', 'value': c[1]} for c in cat_stats]
 
-    # 2. IP 点击量 Top 5 (Bar)
     click_stats = db.session.query(IpAsset.name, func.count(IpAnalytics.id)).join(IpAnalytics).group_by(
         IpAsset.name).order_by(func.count(IpAnalytics.id).desc()).limit(5).all()
     bar_x = [c[0] for c in click_stats]
@@ -213,7 +210,6 @@ def internal_dashboard():
                            search_contract_ip=contract_ip_name,
                            search_contract_partner=contract_partner,
                            tencent_embed_url=tencent_embed_url,
-                           # 传递图表数据
                            pie_data=pie_data,
                            bar_x=bar_x,
                            bar_y=bar_y
@@ -240,7 +236,7 @@ def add_ip():
             reg_number=form.reg_number.data,
             reg_date=form.reg_date.data,
             license_type_options=form.license_type_options.data,
-            value_level='C'  # 初始默认为 C，后续由合同数量决定
+            value_level='C'
         )
         try:
             db.session.add(new_ip)
@@ -278,7 +274,6 @@ def add_contract():
         )
         try:
             db.session.add(new_contract)
-            # [新功能] 自动更新 IP 价值
             update_ip_value_level(new_contract.ip_id)
             db.session.commit()
             flash('新合同添加成功！IP 商业价值已根据规则重新评估。', 'success')
@@ -320,7 +315,6 @@ def delete_contract(contract_id):
     ip_id = c.ip_id
     try:
         db.session.delete(c)
-        # [新功能] 删除合同后也要重新评估价值
         update_ip_value_level(ip_id)
         db.session.commit()
         flash('合同删除成功。IP 商业价值已重新评估。', 'success')
@@ -339,9 +333,7 @@ def portal_dashboard():
     category_query = request.args.get('category', '')
     level_query = request.args.get('value_level', '')
 
-    # [修改] 不再过滤 "不可许可" 的 IP，全部展示
     base_query = IpAsset.query
-
     if search_query:
         base_query = base_query.filter(IpAsset.name.like(f'%{search_query}%'))
     if category_query:
@@ -350,8 +342,6 @@ def portal_dashboard():
         base_query = base_query.filter(IpAsset.value_level == level_query)
 
     ips = base_query.order_by(IpAsset.cooperation_count.desc()).all()
-
-    # 为前端展示计算状态（用于显示 "暂时无法许可" 标签）
     ip_statuses = {ip.id: get_licensing_status(ip) for ip in ips}
 
     categories = [c[0] for c in db.session.query(IpAsset.category).distinct().filter(IpAsset.category != None)]
@@ -361,7 +351,7 @@ def portal_dashboard():
     return render_template('portal_dashboard.html',
                            title='IP 授权门户',
                            ips=ips,
-                           ip_statuses=ip_statuses,  # 传递状态
+                           ip_statuses=ip_statuses,
                            categories=categories,
                            value_levels=value_levels,
                            search_query=search_query,
@@ -375,14 +365,11 @@ def portal_dashboard():
 @partner_required
 def ip_detail(ip_id):
     ip = IpAsset.query.get_or_404(ip_id)
-
-    # [修改] 接收筛选参数，以便“返回列表”时保持状态
     prev_q = request.args.get('q', '')
     prev_cat = request.args.get('category', '')
     prev_lvl = request.args.get('value_level', '')
 
     status = get_licensing_status(ip)
-    # 这里不再跳转回去，而是允许查看详情，但在模板里提示
 
     try:
         new_click = IpAnalytics(ip_id=ip.id, user_id=current_user.id)
@@ -395,17 +382,14 @@ def ip_detail(ip_id):
                            ip=ip,
                            title=ip.name,
                            status=status,
-                           # 传递回之前的参数
                            prev_q=prev_q, prev_cat=prev_cat, prev_lvl=prev_lvl)
 
 
 # --- AI API ---
 
-# API 1: 报表 (润色版)
 @bp.route('/api/get_report')
 def api_get_report():
     try:
-        # 1. 点击量 Top 5
         clicks = db.session.query(IpAsset.name, func.count(IpAnalytics.id)) \
             .join(IpAnalytics).group_by(IpAsset.name) \
             .order_by(func.count(IpAnalytics.id).desc()).limit(5).all()
@@ -415,7 +399,6 @@ def api_get_report():
         for i, (name, count) in enumerate(clicks):
             click_text += f"| {i + 1} | {name} | {count} |\n"
 
-        # 2. 90天内到期
         today = date.today()
         future = today + timedelta(days=90)
         expiring = Contract.query.filter(Contract.term_end >= today, Contract.term_end <= future).all()
@@ -437,7 +420,6 @@ def api_get_report():
         return jsonify({"status": "error", "ip_clicks_report": str(e), "expiring_report": str(e)}), 500
 
 
-# API 2: 违约条款 (不变)
 @bp.route('/api/query_breach_terms')
 def api_query_breach_terms():
     q = request.args.get('q')
@@ -455,31 +437,28 @@ def api_query_breach_terms():
         return jsonify({"status": "error", "count": 0, "report": str(e)}), 500
 
 
-# API 3: 可许可IP (不变，但逻辑已包含地域，此处简单返回列表)
 @bp.route('/api/get_licensable_ips')
 def api_get_licensable_ips():
-    # AI 用的简单列表，这里暂不处理复杂的地域逻辑，返回所有未被完全锁定的
-    # 简单起见，返回所有 IP 及其当前状态描述
     try:
         ips = IpAsset.query.all()
         report = ""
         count = 0
         for ip in ips:
             status = get_licensing_status(ip)
-            if "不可许可" not in status:
+            # 只要不是完全“不可许可”，都列出来，但标明状态
+            if status != "不可许可":
                 count += 1
                 report += f"### {ip.name} ({ip.category})\n"
                 report += f"- **级别**: {ip.value_level}\n"
                 report += f"- **状态**: {status}\n"
                 report += f"- **介绍**: {ip.description}\n\n"
 
-        if count == 0: report = "暂无完全可用的 IP。"
+        if count == 0: report = "当前所有 IP 均处于独占或排他许可期。"
         return jsonify({"status": "success", "count": count, "ips_report": report})
     except Exception as e:
         return jsonify({"status": "error", "count": 0, "ips_report": str(e)}), 500
 
 
-# API 4: 费用参考 (不变)
 @bp.route('/api/get_fee_guidance')
 def api_get_fee_guidance():
     name = request.args.get('ip_name')
@@ -489,18 +468,14 @@ def api_get_fee_guidance():
     return jsonify({"status": "success", "ip_name": ip.name, "value_level": ip.value_level})
 
 
-# [新功能] API 5: 获取数据库概览 (给内控 AI 用)
 @bp.route('/api/get_database_info')
 def api_get_database_info():
-    """返回当前数据库中有哪些 IP 和 合同的摘要列表"""
     try:
-        # 1. IP 列表
         ips = IpAsset.query.all()
         ip_list_text = "**【IP 资产列表】**\n"
         for ip in ips:
             ip_list_text += f"- {ip.name} ({ip.category}, {ip.value_level}级)\n"
 
-        # 2. 合同列表
         contracts = Contract.query.all()
         contract_list_text = "\n**【合同列表】**\n"
         for c in contracts:
