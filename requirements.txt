@@ -6,3 +6,4 @@ Flask-WTF
 python-dotenv
 PyMySQL
 Pillow
+python-docx

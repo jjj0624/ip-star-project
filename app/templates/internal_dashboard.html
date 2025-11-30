@@ -1,115 +1,63 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid"> <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2>{{ title }}</h2>
-            <p class="text-muted">欢迎, {{ current_user.username }}。这里是公司内部管理台账。</p>
-        </div>
-        <div>
-            <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addIpModal">
-                <i class="bi bi-plus-circle"></i> 添加新 IP
-            </button>
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addContractModal">
-                <i class="bi bi-file-earmark-plus"></i> 添加新合同
-            </button>
-        </div>
-    </div>
+<div class="container-fluid">
+    <h2 class="mb-4">{{ title }} <span class="badge bg-primary fs-6">内控视角</span></h2>
 
     <div class="row mb-5">
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
-                <div class="card-header bg-white fw-bold">📊 IP 类别分布</div>
-                <div class="card-body">
-                    <div id="chart-pie" style="height: 300px;"></div>
-                </div>
+                <div class="card-header bg-white fw-bold">💰 IP 目前收益 (万元)</div>
+                <div class="card-body"><div id="chart-rev" style="height:300px;"></div></div>
             </div>
         </div>
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
-                <div class="card-header bg-white fw-bold">🔥 IP 点击量 Top 5</div>
-                <div class="card-body">
-                    <div id="chart-bar" style="height: 300px;"></div>
-                </div>
+                <div class="card-header bg-white fw-bold">🔥 IP 关注热度</div>
+                <div class="card-body"><div id="chart-click" style="height:300px;"></div></div>
             </div>
         </div>
     </div>
 
     <div class="card shadow-sm mb-5">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">A. 版权资产数字化台账</h4>
-        </div>
+        <div class="card-header bg-primary text-white"><h4>A. 资产数字化台账</h4></div>
         <div class="card-body">
-            <form method="GET" action="{{ url_for('main.internal_dashboard') }}" class="row g-3 mb-4 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label">IP 名称</label>
-                    <input type="text" class="form-control" name="ip_name" value="{{ search_ip_name or '' }}">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">IP 类别</label>
-                    <select class="form-select" name="ip_category">
-                        <option value="">所有类别</option>
-                        {% for category in categories %}
-                            <option value="{{ category }}" {% if category == search_ip_category %}selected{% endif %}>{{ category }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <button type="submit" class="btn btn-outline-primary w-100">查询</button>
-                </div>
-            </form>
-
             <div class="table-responsive">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>图样</th>
-                            <th>IP 编号</th>
-                            <th>IP 名称</th>
-                            <th>类别</th>
-                            <th>作者</th>
-                            <th>登记号</th>
-                            <th>级别</th> <th>合作数</th>
-                            <th>许可状态</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
+                <table class="table table-hover align-middle">
+                    <thead><tr>
+                        <th>名称</th><th>级别</th><th>标签</th><th>目前收益</th><th>状态</th><th>操作</th>
+                    </tr></thead>
                     <tbody>
                         {% for ip in ips %}
                         <tr>
-                            <td class="text-center">
-                                {% if ip.image_url %}
-                                    <img src="{{ url_for('static', filename=ip.image_url) }}" alt="img" style="height: 50px; width: 50px; object-fit: cover; border-radius: 4px;">
-                                {% else %}
-                                    <span class="text-muted">无</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ ip.id }}</td>
                             <td class="fw-bold">{{ ip.name }}</td>
-                            <td>{{ ip.category }}</td>
-                            <td>{{ ip.author }}</td>
-                            <td>{{ ip.reg_number }}</td>
-                            <td><span class="badge bg-info text-dark">{{ ip.value_level }}</span></td>
-                            <td>{{ ip.cooperation_count }}</td>
+                            <td>{{ ip.value_level }}</td>
+                            <td>{{ ip.tags }}</td>
+                            <td class="text-success fw-bold">¥{{ ip.current_revenue }}</td>
+                            <td>{{ ip.internal_status }}</td>
                             <td>
-                                {% set status = ip_statuses.get(ip.id, '未知') %}
-                                {% if status == '可以许可' %}
-                                    <span class="badge bg-success">可许可</span>
-                                {% elif '以外' in status %}
-                                    <span class="badge bg-warning text-dark" title="{{ status }}">部分限制</span>
-                                {% else %}
-                                    <span class="badge bg-danger">不可许可</span>
-                                {% endif %}
-                                <small class="d-block text-muted" style="font-size: 0.7rem;">{{ status }}</small>
-                            </td>
-                            <td>
-                                <form action="{{ url_for('main.delete_ip', ip_id=ip.id) }}" method="POST" onsubmit="return confirm('警告：确定要删除这个 IP 吗？');" class="d-inline">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm">删除</button>
-                                </form>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#m{{ ip.id }}">查看详情</button>
+                                <div class="modal fade" id="m{{ ip.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-lg"><div class="modal-content">
+                                        <div class="modal-header"><h5 class="modal-title">{{ ip.name }} 全貌</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                        <div class="modal-body">
+                                            <div class="row">
+                                                <div class="col-4"><img src="{{ url_for('static', filename=ip.image_url) }}" class="img-fluid rounded"></div>
+                                                <div class="col-8">
+                                                    <p><strong>登记号:</strong> {{ ip.reg_number }}</p>
+                                                    <p><strong>权属:</strong> {{ ip.ownership }}</p>
+                                                    <p><strong>作者:</strong> {{ ip.author }}</p>
+                                                    <p><strong>商标:</strong> {{ ip.trademark_info }}</p>
+                                                    <p><strong>授权期:</strong> {{ ip.license_period }}</p>
+                                                    <p><strong>联系:</strong> {{ ip.contact_email }}</p>
+                                                    <p class="text-muted">{{ ip.description }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div></div>
+                                </div>
                             </td>
                         </tr>
-                        {% else %}
-                        <tr><td colspan="10" class="text-center text-muted">无数据</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -118,81 +66,29 @@
     </div>
 
     <div class="card shadow-sm mb-5">
-        <div class="card-header bg-success text-white">
-            <h4 class="mb-0">B. 合同台账</h4>
-        </div>
+        <div class="card-header bg-success text-white"><h4>B. 合同管理台账</h4></div>
         <div class="card-body">
-            <form method="GET" action="{{ url_for('main.internal_dashboard') }}" class="row g-3 mb-4 align-items-end">
-                <div class="col-md-5">
-                    <label class="form-label">相对方名称</label>
-                    <input type="text" class="form-control" name="contract_partner" value="{{ search_contract_partner or '' }}">
-                </div>
-                <div class="col-md-5">
-                    <label class="form-label">IP 名称</label>
-                    <input type="text" class="form-control" name="contract_ip_name" value="{{ search_contract_ip or '' }}">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-outline-success w-100">查询</button>
-                </div>
-            </form>
-
             <div class="table-responsive">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>IP 名称</th>
-                            <th>相对方</th>
-                            <th>许可地域</th>
-                            <th>许可类型</th>
-                            <th>许可期限</th>
-                            <th>详情</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
+                <table class="table table-bordered align-middle">
+                    <thead><tr>
+                        <th>案例</th><th>IP</th><th>品牌/相对方</th><th>地域</th><th>方式/类别</th><th>类型</th><th>有效期</th><th>原件</th>
+                    </tr></thead>
                     <tbody>
-                        {% for contract in contracts %}
+                        {% for c in contracts %}
                         <tr>
-                            <td>{{ contract.id }}</td>
-                            <td class="fw-bold">{{ contract.ip_asset.name }}</td>
-                            <td>{{ contract.partner_name }}</td>
-                            <td>{{ contract.region or '未指定' }}</td>
-                            <td>{{ contract.license_type }}</td>
-                            <td>{{ contract.term_start }} 至 {{ contract.term_end }}</td>
+                            <td>{% if c.case_image_url %}<img src="{{ url_for('static', filename=c.case_image_url) }}" width="40" height="40" class="rounded">{% endif %}</td>
+                            <td class="fw-bold">{{ c.ip_asset.name }}</td>
+                            <td>{{ c.partner_brand }}<br><small class="text-muted">{{ c.partner_name }}</small></td>
+                            <td>{{ c.region }}</td>
+                            <td>{{ c.license_method }}<br><small>{{ c.license_category }}</small></td>
+                            <td>{{ c.license_type }}</td>
+                            <td class="small">{{ c.term_start }}<br>至 {{ c.term_end }}</td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#contractDetailModal{{ contract.id }}">
-                                    查看
-                                </button>
-
-                                <div class="modal fade" id="contractDetailModal{{ contract.id }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h5 class="modal-title">合同详情 (ID: {{ contract.id }})</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <p><strong>IP 名称:</strong> {{ contract.ip_asset.name }}</p>
-                                                <p><strong>相对方:</strong> {{ contract.partner_name }}</p>
-                                                <p><strong>许可媒介:</strong> {{ contract.media }}</p>
-                                                <p><strong>使用方式:</strong> {{ contract.usage_type }}</p>
-                                                <hr>
-                                                <p><strong>费用标准:</strong><br>{{ contract.fee_standard }}</p>
-                                                <p><strong>结算周期:</strong><br>{{ contract.payment_cycle }}</p>
-                                                <p><strong>违约责任:</strong><br>{{ contract.breach_terms }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <form action="{{ url_for('main.delete_contract', contract_id=contract.id) }}" method="POST" onsubmit="return confirm('确定要删除这份合同吗？');">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm">删除</button>
-                                </form>
+                                {% if c.pdf_url %}
+                                <a href="{{ url_for('static', filename=c.pdf_url) }}" target="_blank" class="btn btn-sm btn-danger">查看合同</a>
+                                {% else %}<span class="text-muted">无</span>{% endif %}
                             </td>
                         </tr>
-                        {% else %}
-                        <tr><td colspan="8" class="text-center text-muted">无数据</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -200,188 +96,15 @@
         </div>
     </div>
 
-    <div class="mt-5 mb-5 text-center">
-        <hr>
-        <h2 class="mb-4 text-primary">IP STAR 内部智能助手</h2>
-        {% if tencent_embed_url %}
-            <a href="{{ tencent_embed_url }}" class="btn btn-primary btn-lg shadow-lg rounded-pill px-5" target="_blank">
-                🚀 前往 内部智能助手 聊天
-            </a>
-            <p class="text-muted mt-2 small">点击将在新标签页打开专业助手</p>
-        {% else %}
-            <div class="alert alert-warning">未配置 AI 助手链接</div>
-        {% endif %}
-    </div>
-
-    <div class="modal fade" id="addIpModal" tabindex="-1" aria-labelledby="addIpModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <form action="{{ url_for('main.add_ip') }}" method="POST" novalidate enctype="multipart/form-data">
-                    {{ ip_form.hidden_tag() }}
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="addIpModalLabel">添加新 IP 资产</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            {{ ip_form.name.label(class="form-label") }}
-                            {{ ip_form.name(class="form-control") }}
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.category.label(class="form-label") }}
-                                {{ ip_form.category(class="form-control") }}
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.author.label(class="form-label") }}
-                                {{ ip_form.author(class="form-control") }}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            {{ ip_form.description.label(class="form-label") }}
-                            {{ ip_form.description(class="form-control", rows=3) }}
-                        </div>
-                        <div class="mb-3">
-                            {{ ip_form.image_file.label(class="form-label") }}
-                            {{ ip_form.image_file(class="form-control") }}
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.reg_number.label(class="form-label") }}
-                                {{ ip_form.reg_number(class="form-control") }}
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.reg_date.label(class="form-label") }}
-                                {{ ip_form.reg_date(class="form-control", type="date") }}
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.value_level.label(class="form-label") }}
-                                {{ ip_form.value_level(class="form-select") }}
-                                <small class="text-muted">注：添加合同后会自动重新评估</small>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ ip_form.ownership.label(class="form-label") }}
-                                {{ ip_form.ownership(class="form-control") }}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            {{ ip_form.license_type_options.label(class="form-label") }}
-                            {{ ip_form.license_type_options(class="form-control", placeholder="例如: 普通许可/排他许可") }}
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-                        {{ ip_form.submit(class="btn btn-primary") }}
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="addContractModal" tabindex="-1" aria-labelledby="addContractModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <form action="{{ url_for('main.add_contract') }}" method="POST" novalidate>
-                    {{ contract_form.hidden_tag() }}
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="addContractModalLabel">添加新合同</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.ip_id.label(class="form-label") }}
-                                {{ contract_form.ip_id(class="form-select") }}
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.partner_name.label(class="form-label") }}
-                                {{ contract_form.partner_name(class="form-control") }}
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.license_type.label(class="form-label") }}
-                                {{ contract_form.license_type(class="form-select") }}
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.media.label(class="form-label") }}
-                                {{ contract_form.media(class="form-control") }}
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.term_start.label(class="form-label") }}
-                                {{ contract_form.term_start(class="form-control", type="date") }}
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                {{ contract_form.term_end.label(class="form-label") }}
-                                {{ contract_form.term_end(class="form-control", type="date") }}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            {{ contract_form.region.label(class="form-label") }}
-                            {{ contract_form.region(class="form-control") }}
-                        </div>
-                        <div class="mb-3">
-                            {{ contract_form.usage_type.label(class="form-label") }}
-                            {{ contract_form.usage_type(class="form-control") }}
-                        </div>
-                        <div class="mb-3">
-                            {{ contract_form.fee_standard.label(class="form-label") }}
-                            {{ contract_form.fee_standard(class_="form-control", rows=3) }}
-                        </div>
-                        <div class="mb-3">
-                            {{ contract_form.payment_cycle.label(class="form-label") }}
-                            {{ contract_form.payment_cycle(class_="form-control", rows=3) }}
-                        </div>
-                         <div class="mb-3">
-                            {{ contract_form.breach_terms.label(class="form-label") }}
-                            {{ contract_form.breach_terms(class_="form-control", rows=3) }}
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-                        {{ contract_form.submit(class="btn btn-success") }}
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
+    {% if tencent_embed_url %}
+    <a href="{{ tencent_embed_url }}" target="_blank" class="btn btn-primary btn-lg rounded-pill shadow-lg" style="position:fixed;bottom:20px;right:20px;">🤖 AI 助手</a>
+    {% endif %}
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <script>
-    // 饼图
-    var chartPie = echarts.init(document.getElementById('chart-pie'));
-    var pieData = {{ pie_data | tojson }};
-    chartPie.setOption({
-        tooltip: { trigger: 'item' },
-        legend: { bottom: '0%' },
-        series: [{
-            type: 'pie', radius: ['40%', '70%'],
-            data: pieData,
-            itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 }
-        }]
-    });
-
-    // 柱状图
-    var chartBar = echarts.init(document.getElementById('chart-bar'));
-    var barX = {{ bar_x | tojson }};
-    var barY = {{ bar_y | tojson }};
-    chartBar.setOption({
-        tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: barX },
-        yAxis: { type: 'value' },
-        series: [{ type: 'bar', data: barY, itemStyle: { color: '#3b82f6' } }]
-    });
-
-    // 窗口大小改变时重绘
-    window.addEventListener('resize', function() {
-        chartPie.resize();
-        chartBar.resize();
-    });
+    var cRev = echarts.init(document.getElementById('chart-rev'));
+    cRev.setOption({ xAxis:{type:'category',data:{{rev_x|tojson}}}, yAxis:{type:'value'}, series:[{type:'bar',data:{{rev_y|tojson}},itemStyle:{color:'#198754'}}] });
+    var cClick = echarts.init(document.getElementById('chart-click'));
+    cClick.setOption({ xAxis:{type:'category',data:{{click_x|tojson}}}, yAxis:{type:'value'}, series:[{type:'line',smooth:true,data:{{click_y|tojson}},itemStyle:{color:'#0d6efd'}}] });
 </script>
 {% endblock %}

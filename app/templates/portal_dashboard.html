@@ -1,102 +1,52 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="container-fluid py-4">
     <div class="text-center mb-5">
-        <h2 class="fw-bold">{{ title }}</h2>
-        <p class="text-muted">欢迎, {{ current_user.username }}。探索可合作的 IP 形象。</p>
+        <h1 class="fw-bold text-primary">IP 星伴 · 授权门户</h1>
+        <p class="text-muted">发现无限商业可能</p>
     </div>
 
-    <div class="card my-4 shadow-sm border-0">
-        <div class="card-body bg-light rounded">
-            <form method="GET" action="{{ url_for('main.portal_dashboard') }}">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">IP 名称</label>
-                        <input type="text" class="form-control" name="q" value="{{ search_query or '' }}" placeholder="输入关键词...">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">类别</label>
-                        <select class="form-select" name="category">
-                            <option value="">所有类别</option>
-                            {% for category in categories %}
-                                <option value="{{ category }}" {% if category == selected_category %}selected{% endif %}>{{ category }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">商业价值</label>
-                        <select class="form-select" name="value_level">
-                            <option value="">所有等级</option>
-                            {% for level in value_levels %}
-                                <option value="{{ level }}" {% if level == selected_level %}selected{% endif %}>{{ level }} 级</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2 align-self-end">
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">🔍 筛选</button>
+    <div class="mb-5">
+        <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-primary">精彩合作案例</h3>
+        <div id="caseCarousel" class="carousel slide shadow rounded" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                {% for case in cases %}
+                <div class="carousel-item {% if loop.first %}active{% endif %}">
+                    <div class="d-flex align-items-center justify-content-center p-5 text-white"
+                         style="height: 400px; background: url('{{ url_for('static', filename=case.case_image_url) }}') center/cover;">
+                        <div class="p-4" style="background: rgba(0,0,0,0.6); border-radius: 10px;">
+                            <h2>{{ case.partner_brand }} x {{ case.ip_asset.name }}</h2>
+                            <p>{{ case.usage_type }}</p>
+                        </div>
                     </div>
                 </div>
-            </form>
+                {% endfor %}
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#caseCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button>
+            <button class="carousel-control-next" type="button" data-bs-target="#caseCarousel" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
-        {% for ip in ips %}
+    <div class="mb-5">
+        <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-success">IP 形象库</h3>
+        <div class="row row-cols-1 row-cols-md-4 g-4">
+            {% for ip in ips %}
             <div class="col">
-                <div class="card h-100 shadow-sm border-0 position-relative overflow-hidden ip-card">
-
-                    {% set status = ip_statuses.get(ip.id, '未知') %}
-                    {% if '不可许可' in status %}
-                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-                             style="background: rgba(0,0,0,0.6); z-index: 10; opacity: 0; transition: opacity 0.3s;"
-                             onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-                            <div class="text-center text-white p-3">
-                                <h5 class="fw-bold">暂时无法许可</h5>
-                                <p class="small mb-0">该 IP 当前已有独占合作</p>
-                                <p class="small">请联系商务深入沟通</p>
-                            </div>
-                        </div>
-                    {% endif %}
-
-                    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" alt="{{ ip.name }}" style="height: 250px; object-fit: cover;">
-
+                <div class="card h-100 border-0 shadow-sm ip-card">
+                    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" style="height:250px; object-fit:cover;">
                     <div class="card-body text-center">
-                        <h5 class="card-title fw-bold mb-1">{{ ip.name }}</h5>
-                        <p class="text-muted small mb-2">{{ ip.category }} | {{ ip.value_level }}级</p>
-
-                        {% if '不可许可' in status %}
-                            <span class="badge bg-secondary">暂时锁定</span>
-                        {% elif '以外' in status %}
-                            <span class="badge bg-warning text-dark">区域受限</span>
-                        {% else %}
-                            <span class="badge bg-success">可合作</span>
-                        {% endif %}
-                    </div>
-
-                    <div class="card-footer bg-white border-0 text-center pb-3">
-                        <a href="{{ url_for('main.ip_detail', ip_id=ip.id, q=search_query, category=selected_category, value_level=selected_level) }}"
-                           class="btn btn-outline-primary rounded-pill px-4">查看详情</a>
+                        <h5 class="fw-bold">{{ ip.name }}</h5>
+                        <small class="text-muted">{{ ip.tags }}</small>
                     </div>
                 </div>
             </div>
-        {% else %}
-            <div class="col-12 py-5">
-                <div class="text-center text-muted">
-                    <i class="bi bi-inbox display-4"></i>
-                    <p class="mt-3">没有找到符合条件的 IP 形象。</p>
-                </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        </div>
     </div>
 
-    <div class="mt-5 pt-5 text-center">
-        <hr>
-        <h2 class="mb-4 text-primary">IP STAR 伙伴合作顾问</h2>
-        {% if tencent_embed_url %}
-            <a href="{{ tencent_embed_url }}" class="btn btn-primary btn-lg shadow-lg rounded-pill px-5" target="_blank">
-                💡 前往 伙伴顾问 聊天
-            </a>
-            <p class="text-muted mt-2 small">获取专业推荐与费用测算</p>
-        {% endif %}
-    </div>
+    {% if tencent_embed_url %}
+    <a href="{{ tencent_embed_url }}" target="_blank" class="btn btn-success btn-lg rounded-pill shadow-lg" style="position:fixed;bottom:20px;right:20px;">💡 合作咨询</a>
+    {% endif %}
+</div>
 {% endblock %}
