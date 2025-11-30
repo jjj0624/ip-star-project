@@ -19,7 +19,8 @@ bp = Blueprint('main', __name__)
 def internal_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != 'internal': abort(403)
+        if not current_user.is_authenticated or current_user.role != 'internal':
+            abort(403)
         return f(*args, **kwargs)
 
     return decorated_function
@@ -28,7 +29,8 @@ def internal_required(f):
 def partner_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != 'partner': abort(403)
+        if not current_user.is_authenticated or current_user.role != 'partner':
+            abort(403)
         return f(*args, **kwargs)
 
     return decorated_function
@@ -49,12 +51,13 @@ def index():
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('main.index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
         if user is None or not user.check_password(form.password.data):
-            flash('无效用户名或密码', 'danger');
+            flash('无效用户名或密码', 'danger')
             return redirect(url_for('main.login'))
         login_user(user, remember=form.remember_me.data)
         return redirect(url_for('main.index'))
@@ -63,7 +66,7 @@ def login():
 
 @bp.route('/logout')
 def logout():
-    logout_user();
+    logout_user()
     return redirect(url_for('main.login'))
 
 
@@ -73,13 +76,13 @@ def register():
     if form.validate_on_submit():
         user = User(username=form.username.data, role=form.role.data)
         user.set_password(form.password.data)
-        db.session.add(user);
+        db.session.add(user)
         db.session.commit()
         return redirect(url_for('main.login'))
     return render_template('register.html', title='注册', form=form)
 
 
-# --- 内控端看板 (全量展示 + 详情 Modal + 图表) ---
+# --- 内控端看板 ---
 @bp.route('/internal/dashboard')
 @login_required
 @internal_required
@@ -98,7 +101,8 @@ def internal_dashboard():
     click_y = [c[1] for c in click_stats]
 
     ips = IpAsset.query.all()
-    contracts = Contract.query.order_by(desc(Contract.term_start)).all()
+    # 按照ID倒序排列合同，显示最新的
+    contracts = Contract.query.order_by(desc(Contract.id)).all()
 
     # 传递表单以防模板报错(尽管这里只做展示)
     ip_form = IpAssetForm()
@@ -113,19 +117,21 @@ def internal_dashboard():
                            tencent_embed_url=tencent_embed_url)
 
 
-# --- 伙伴端门户 (极简 + 合作案例) ---
+# --- 伙伴端门户 ---
 @bp.route('/portal/dashboard')
 @login_required
 @partner_required
 def portal_dashboard():
     # 1. 合作案例 (只取有案例图的合同)
+    # 修复点：Contract.contract_id -> Contract.id
     cases = Contract.query.filter(Contract.case_image_url != None) \
-        .order_by(desc(Contract.contract_id)).limit(8).all()
+        .order_by(desc(Contract.id)).limit(8).all()
 
     # 2. IP 列表 (不含状态逻辑)
     query = request.args.get('q', '')
     base_query = IpAsset.query
-    if query: base_query = base_query.filter(IpAsset.name.like(f'%{query}%'))
+    if query:
+        base_query = base_query.filter(IpAsset.name.like(f'%{query}%'))
     ips = base_query.all()
 
     tencent_embed_url = os.environ.get('TENCENT_EMBED_URL_PARTNER')
@@ -141,24 +147,30 @@ def ip_detail(ip_id):
     ip = IpAsset.query.get_or_404(ip_id)
     # 记录点击
     try:
-        db.session.add(IpAnalytics(ip_id=ip.id, user_id=current_user.id)); db.session.commit()
+        db.session.add(IpAnalytics(ip_id=ip.id, user_id=current_user.id))
+        db.session.commit()
     except:
         pass
     return render_template('ip_detail.html', ip=ip)
 
 
-# --- 简单的添加/删除功能 (保留原逻辑，略微简化) ---
+# --- 简单的添加/删除功能 ---
 @bp.route('/ip/delete/<int:ip_id>', methods=['POST'])
 @login_required
 @internal_required
 def delete_ip(ip_id):
     try:
         ip = IpAsset.query.get(ip_id)
-        db.session.delete(ip);
-        db.session.commit()
-        flash('已删除', 'success')
-    except:
-        flash('删除失败，可能有关联合同', 'danger')
+        # 如果有关联合同，可能会报错，建议先处理合同
+        if ip.contracts:
+            flash('删除失败：该 IP 存在关联合同，请先删除合同。', 'danger')
+        else:
+            db.session.delete(ip)
+            db.session.commit()
+            flash('已删除', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'删除失败: {str(e)}', 'danger')
     return redirect(url_for('main.internal_dashboard'))
 
 
@@ -170,7 +182,6 @@ def delete_ip(ip_id):
 def api_get_database_info():
     """
     [内控AI] 获取全量数据，用于生成报表。
-    注意：为了适配腾讯云插件，这里改为 POST (或者 GET 也可以，但 JSON配置要对应)
     """
     try:
         # 1. IP 全貌
@@ -232,7 +243,8 @@ def api_generate_contract_doc():
         # 保存
         filename = f"Contract_{secrets.token_hex(4)}.docx"
         save_dir = os.path.join(current_app.root_path, 'static', 'generated_docs')
-        if not os.path.exists(save_dir): os.makedirs(save_dir)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
         doc.save(os.path.join(save_dir, filename))
 
