@@ -21,7 +21,10 @@
                             <p class="lead text-secondary mb-4">{{ ip.description }}</p>
 
                             <ul class="list-group list-group-flush mb-4">
-                                <li class="list-group-item bg-transparent px-0"><strong>可授权期限：</strong> {{ ip.license_period }}</li>
+                                <li class="list-group-item bg-transparent px-0">
+                                    <strong>联系邮箱：</strong>
+                                    <span class="text-primary">{{ ip.contact_email or 'official@ipstar.com' }}</span>
+                                </li>
                                 <li class="list-group-item bg-transparent px-0"><strong>权属：</strong> {{ ip.ownership }}</li>
                                 <li class="list-group-item bg-transparent px-0"><strong>登记号：</strong> {{ ip.reg_number }}</li>
                             </ul>

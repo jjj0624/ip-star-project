@@ -156,10 +156,10 @@
                             <th style="width: 60px;">案例</th>
                             <th style="width: 10%;">IP名称</th>
                             <th style="width: 18%;">相对方 & 品牌</th>
-                            <th style="width: 10%;">许可信息</th>
+                            <th style="width: 15%;">许可信息</th>
                             <th style="width: 22%;">有效期</th>
-                            <th style="width: 90px;">原件</th>
-                            <th style="width: 80px;">操作</th>
+                            <th style="width: 70px;">原件</th>
+                            <th style="width: 70px;">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -177,14 +177,14 @@
                             </td>
                             <td>
                                 <span class="badge bg-light text-dark border">{{ c.license_type }}</span>
-                                <div class="small mt-1 text-muted text-truncate mx-auto" style="max-width: 90px;" title="{{ c.region }}">{{ c.region }}</div>
+                                <div class="small mt-1 text-muted text-truncate mx-auto" style="max-width: 120px;" title="{{ c.region }}">{{ c.region }}</div>
                             </td>
                             <td class="small text-nowrap">
                                 {{ c.term_start }} — {{ c.term_end }}
                             </td>
                             <td>
                                 {% if c.pdf_url %}
-                                <a href="{{ url_for('static', filename=c.pdf_url) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0" style="font-size: 0.75rem;">
+                                <a href="{{ url_for('static', filename=c.pdf_url) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 0.75rem;">
                                     合同pdf
                                 </a>
                                 {% else %}-{% endif %}
