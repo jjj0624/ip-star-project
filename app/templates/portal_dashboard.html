@@ -44,7 +44,8 @@
 
     <div class="mb-5">
         <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-primary">精彩合作案例</h3>
-        <div id="caseCarousel" class="carousel slide shadow rounded overflow-hidden" data-bs-ride="carousel">
+
+        <div id="caseCarousel" class="carousel slide shadow rounded overflow-hidden" data-bs-ride="carousel" data-bs-interval="2500">
             <div class="carousel-inner">
                 {% for case in cases %}
                 <div class="carousel-item {% if loop.first %}active{% endif %}">
@@ -74,8 +75,15 @@
                 </div>
                 {% endfor %}
             </div>
-            <button class="carousel-control-prev" type="button" data-bs-target="#caseCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button>
-            <button class="carousel-control-next" type="button" data-bs-target="#caseCarousel" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>
+
+            <button class="carousel-control-prev" type="button" data-bs-target="#caseCarousel" data-bs-slide="prev" style="z-index: 10; width: 10%;">
+                <span class="carousel-control-prev-icon bg-dark rounded-circle p-3" aria-hidden="true" style="background-size: 50%;"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#caseCarousel" data-bs-slide="next" style="z-index: 10; width: 10%;">
+                <span class="carousel-control-next-icon bg-dark rounded-circle p-3" aria-hidden="true" style="background-size: 50%;"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
         </div>
     </div>
 
