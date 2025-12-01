@@ -312,7 +312,6 @@ def internal_get_database_info():
 
         # 2. 合同数据 (只取前20条，防止超时)
         contracts = Contract.query.order_by(desc(Contract.id)).limit(20).all()
-        report.append("\n【合同(最新20条)】")
         for c in contracts:
             # 截取过长的文本
             term_info = f"{c.term_start}~{c.term_end}"
