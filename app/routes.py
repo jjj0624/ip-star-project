@@ -292,40 +292,45 @@ def partner_get_fee_guidance():
 # --- 内控端专用 API (修复版) ---
 # ==================================================================
 
-@bp.route('/api/internal/get_database_info', methods=['POST'])
+# app/routes.py 中找到对应的部分进行替换
+
+@bp.route('/api/internal/get_database_info', methods=['GET', 'POST'])
 def internal_get_database_info():
     """
-    修复说明：增加异常捕获和日志打印，精简字段以防超时
+    [内控端] 模块1: 上帝视角全量查询 (修复版: 支持GET测试，防超时)
     """
     try:
-        # 1. 资产数据 (精简格式)
-        ips = IpAsset.query.all()
-        report = ["=== IP资产表 ==="]
+        # 1. IP 资产 (只取前20条，防止超时)
+        ips = IpAsset.query.limit(20).all()
+        report = ["【IP资产(前20条)】"]
         for ip in ips:
-            status = get_licensing_status(ip)
-            # 使用紧凑格式，去除过多空格和换行
-            line = (f"ID:{ip.id}|名称:{ip.name}|级别:{ip.value_level}|标签:{ip.tags}|收益:{ip.current_revenue}万|"
-                    f"权属:{ip.ownership}|商标:{ip.trademark_info}|状态:{status}|期限:{ip.license_period}")
+            # 简化状态描述，减少计算量
+            status = ip.internal_status
+            line = (f"ID:{ip.id}|名:{ip.name}|级:{ip.value_level}|益:{ip.current_revenue}|"
+                    f"权:{ip.ownership}|商:{ip.trademark_info}|态:{status}")
             report.append(line)
 
-        # 2. 合同数据 (精简格式)
-        contracts = Contract.query.all()
-        report.append("\n=== 合同台账表 ===")
+        # 2. 合同数据 (只取前20条，防止超时)
+        contracts = Contract.query.order_by(desc(Contract.id)).limit(20).all()
+        report.append("\n【合同(最新20条)】")
         for c in contracts:
-            line = (f"ID:{c.id}|方:{c.partner_name}|IP:{c.ip_asset.name}|类型:{c.license_type}|"
-                    f"期:{c.term_start}至{c.term_end}|费:{c.fee_standard}|付:{c.payment_cycle}|违:{c.breach_terms[:30]}...")
+            # 截取过长的文本
+            term_info = f"{c.term_start}~{c.term_end}"
+            line = (f"ID:{c.id}|方:{c.partner_name}|IP:{c.ip_asset.name}|型:{c.license_type}|"
+                    f"期:{term_info}|费:{c.fee_standard[:10]}...")
             report.append(line)
 
         final_report = "\n".join(report)
 
-        # 打印长度日志，帮助排查
-        print(f"Database Info Length: {len(final_report)}")
-
+        print(f"API Success. Length: {len(final_report)}")  # 打印成功日志
         return jsonify({"status": "success", "info_report": final_report})
 
     except Exception as e:
-        print(f"CRITICAL ERROR in get_database_info: {e}")  # 这里的错误会显示在 PythonAnywhere Error Log 中
-        return jsonify({"status": "error", "message": str(e)}), 500
+        # 将错误打印到 PythonAnywhere 的 Server Log
+        import traceback
+        traceback.print_exc()
+        print(f"API ERROR: {str(e)}")
+        return jsonify({"status": "error", "message": f"Server Error: {str(e)}"}), 500
 
 
 @bp.route('/api/internal/get_report', methods=['POST'])
