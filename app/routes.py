@@ -2,6 +2,8 @@ import os
 import secrets
 from datetime import date, timedelta
 from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from flask import (render_template, flash, redirect, url_for, request,
                    Blueprint, abort, current_app, jsonify)
 from flask_login import current_user, login_user, logout_user, login_required
@@ -43,14 +45,13 @@ def get_licensing_status(ip_asset):
         Contract.term_start <= today,
         Contract.term_end >= today
     ).all()
-    if not active_contracts: return "✅ 暂无限制，可全球许可"
+    if not active_contracts: return "✅ 可全球许可"
     regions = [c.region for c in active_contracts if c.region]
     for r in regions:
-        if "全球" in r: return "🔒 不可许可 (已有全球独占)"
+        if "全球" in r: return "🔒 不可许可(全球独占)"
     if regions:
-        unique_regions = list(set(regions))
-        region_str = "、".join(unique_regions)
-        return f"⚠️ 除 {region_str} 外可许可"
+        region_str = "、".join(list(set(regions)))
+        return f"⚠️ 除{region_str}外可许可"
     return "✅ 可许可"
 
 
@@ -73,7 +74,7 @@ def partner_required(f):
     return decorated_function
 
 
-# --- 页面路由 (保持不变) ---
+# --- 页面路由 ---
 @bp.route('/')
 @bp.route('/index')
 @login_required
@@ -116,6 +117,7 @@ def register():
     return render_template('register.html', title='注册', form=form)
 
 
+# --- 内控端页面 ---
 @bp.route('/internal/dashboard')
 @login_required
 @internal_required
@@ -158,6 +160,7 @@ def internal_dashboard():
                            search_ct_type=ct_q_type, tencent_embed_url=tencent_embed_url)
 
 
+# --- 伙伴端页面 ---
 @bp.route('/portal/dashboard')
 @login_required
 @partner_required
@@ -184,7 +187,7 @@ def ip_detail(ip_id):
     return render_template('ip_detail.html', ip=ip)
 
 
-# --- 增删操作 (路由保持不变) ---
+# --- 增删操作 ---
 @bp.route('/ip/add', methods=['POST'])
 @login_required
 @internal_required
@@ -253,173 +256,185 @@ def delete_contract(contract_id):
 
 
 # ==================================================================
-# --- 伙伴端专用 API (Partner APIs) ---
+# --- 伙伴端专用 API ---
 # ==================================================================
 
 @bp.route('/api/partner/get_licensable_ips', methods=['POST'])
 def partner_get_licensable_ips():
-    """
-    [伙伴端] 模块1: 获取可授权IP列表 (推荐用)
-    不返回任何收益数据和合同数据，只返回名称、标签、类别、描述、级别。
-    """
     try:
         ips = IpAsset.query.all()
+        # 优化：只返回关键信息，减少 Token 消耗
         report = []
         for ip in ips:
-            # 简单拼接一个字符串供 AI 理解，或者返回结构化 JSON
-            info = f"IP名称: {ip.name} | 标签: {ip.tags} | 描述: {ip.description} | 级别: {ip.value_level} | 状态: {ip.internal_status}"
+            info = f"名称:{ip.name}|标签:{ip.tags}|描述:{ip.description[:50]}...|级别:{ip.value_level}"
             report.append(info)
-
-        return jsonify({
-            "status": "success",
-            "count": len(ips),
-            "ips_report": "\n".join(report)
-        })
+        return jsonify({"status": "success", "count": len(ips), "ips_report": "\n".join(report)})
     except Exception as e:
+        print(f"Error Partner IP: {e}")  # 打印日志
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @bp.route('/api/partner/get_fee_guidance', methods=['POST'])
 def partner_get_fee_guidance():
-    """
-    [伙伴端] 模块2: 费用智能测算
-    根据 IP 名称查询商业价值级别。
-    """
     data = request.get_json() or {}
     ip_name = data.get('ip_name')
-    if not ip_name:
-        return jsonify({"status": "error", "message": "Missing ip_name"}), 400
-
+    if not ip_name: return jsonify({"status": "error", "message": "Missing ip_name"}), 400
     try:
         ip = IpAsset.query.filter(IpAsset.name == ip_name).first()
-        if not ip:
-            return jsonify({"status": "error", "message": "IP not found", "value_level": "未知"})
-
-        return jsonify({
-            "status": "success",
-            "ip_name": ip.name,
-            "value_level": ip.value_level,  # S/A/B/C
-            "advice": f"该IP为 {ip.value_level} 级资产，请结合客户行业规模进行区间估算。"
-        })
+        if not ip: return jsonify({"status": "error", "message": "IP not found", "value_level": "未知"})
+        return jsonify({"status": "success", "ip_name": ip.name, "value_level": ip.value_level})
     except Exception as e:
+        print(f"Error Partner Fee: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # ==================================================================
-# --- 内控端专用 API (Internal APIs) ---
+# --- 内控端专用 API (修复版) ---
 # ==================================================================
 
 @bp.route('/api/internal/get_database_info', methods=['POST'])
 def internal_get_database_info():
     """
-    [内控端] 模块1: 上帝视角全量查询
+    修复说明：增加异常捕获和日志打印，精简字段以防超时
     """
     try:
+        # 1. 资产数据 (精简格式)
         ips = IpAsset.query.all()
-        report = ["【IP 资产全量数据】"]
+        report = ["=== IP资产表 ==="]
         for ip in ips:
             status = get_licensing_status(ip)
-            report.append(f"ID:{ip.id} | 名称:{ip.name} | 级别:{ip.value_level} | 标签:{ip.tags}")
-            report.append(f"  收益:{ip.current_revenue}万 | 状态:{status} | 授权期:{ip.license_period}")
-            report.append(f"  权属:{ip.ownership} | 商标:{ip.trademark_info}")
-            report.append("---")
+            # 使用紧凑格式，去除过多空格和换行
+            line = (f"ID:{ip.id}|名称:{ip.name}|级别:{ip.value_level}|标签:{ip.tags}|收益:{ip.current_revenue}万|"
+                    f"权属:{ip.ownership}|商标:{ip.trademark_info}|状态:{status}|期限:{ip.license_period}")
+            report.append(line)
 
+        # 2. 合同数据 (精简格式)
         contracts = Contract.query.all()
-        report.append("\n【合同台账全量数据】")
+        report.append("\n=== 合同台账表 ===")
         for c in contracts:
-            report.append(f"ID:{c.id} | 相对方:{c.partner_name} | IP:{c.ip_asset.name} | 类型:{c.license_type}")
-            report.append(f"  有效期:{c.term_start} 至 {c.term_end} | 费用:{c.fee_standard}")
-            report.append(f"  条款:{c.breach_terms} | 支付:{c.payment_cycle}")
-            report.append("---")
+            line = (f"ID:{c.id}|方:{c.partner_name}|IP:{c.ip_asset.name}|类型:{c.license_type}|"
+                    f"期:{c.term_start}至{c.term_end}|费:{c.fee_standard}|付:{c.payment_cycle}|违:{c.breach_terms[:30]}...")
+            report.append(line)
 
-        return jsonify({"status": "success", "info_report": "\n".join(report)})
+        final_report = "\n".join(report)
+
+        # 打印长度日志，帮助排查
+        print(f"Database Info Length: {len(final_report)}")
+
+        return jsonify({"status": "success", "info_report": final_report})
+
     except Exception as e:
+        print(f"CRITICAL ERROR in get_database_info: {e}")  # 这里的错误会显示在 PythonAnywhere Error Log 中
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @bp.route('/api/internal/get_report', methods=['POST'])
 def internal_get_report():
-    """
-    [内控端] 模块2: 一键生成报表 (点击/收益/到期)
-    """
     try:
-        # 1. 收益排行
         rev_stats = db.session.query(IpAsset.name, IpAsset.current_revenue).order_by(
             desc(IpAsset.current_revenue)).limit(5).all()
-        revenue_report = "【IP当前收益排行 (Top 5)】\n" + "\n".join(
-            [f"{i + 1}. {r[0]}: {r[1]}万元" for i, r in enumerate(rev_stats)])
+        rev_rpt = "【收益Top5】\n" + "\n".join([f"{r[0]}: {r[1]}万" for r in rev_stats])
 
-        # 2. 点击热度
         click_stats = db.session.query(IpAsset.name, func.count(IpAnalytics.id)).join(IpAnalytics).group_by(
             IpAsset.name).order_by(func.count(IpAnalytics.id).desc()).limit(5).all()
-        click_report = "【IP点击热度排行 (Top 5)】\n" + "\n".join(
-            [f"{i + 1}. {c[0]}: {c[1]}次" for i, c in enumerate(click_stats)])
+        click_rpt = "【热度Top5】\n" + "\n".join([f"{c[0]}: {c[1]}次" for c in click_stats])
 
-        # 3. 90天内到期预警
-        today = date.today()
+        today = date.today();
         ninety_days = today + timedelta(days=90)
         expiring = Contract.query.filter(Contract.term_end >= today, Contract.term_end <= ninety_days).order_by(
             Contract.term_end).all()
-        if expiring:
-            expire_report = "【90天内到期合同预警】\n" + "\n".join(
-                [f"- {c.partner_name} ({c.ip_asset.name}): {c.term_end} 到期" for c in expiring])
-        else:
-            expire_report = "【到期预警】\n未来90天内暂无即将到期的合同。"
+        exp_rpt = "【到期预警】\n" + (
+            "\n".join([f"{c.partner_name}({c.ip_asset.name}):{c.term_end}" for c in expiring]) if expiring else "无")
 
-        return jsonify({
-            "status": "success",
-            "revenue_report": revenue_report,
-            "click_report": click_report,
-            "expire_report": expire_report
-        })
+        return jsonify(
+            {"status": "success", "revenue_report": rev_rpt, "click_report": click_rpt, "expire_report": exp_rpt})
     except Exception as e:
+        print(f"Error Report: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @bp.route('/api/internal/generate_contract_doc', methods=['POST'])
 def internal_generate_contract_doc():
     """
-    [内控端] 模块3: 生成合同初稿 (11项要素)
+    专业版合同生成：包含标准法务条款
     """
     data = request.get_json() or {}
     try:
         doc = Document()
-        doc.add_heading('IP 授权许可合同 (草案)', 0)
 
-        # 提取 11 项要素
-        p_name = data.get('partner_name', '______')  # 相对方
-        ip_name = data.get('ip_name', '______')  # IP名称
-        region = data.get('region', '中国大陆')  # 地域
-        media = data.get('media', '全媒体')  # 媒介
-        usage = data.get('usage_type', '商品授权')  # 使用方式
-        c_type = data.get('license_type', '普通许可')  # 类型
-        term = data.get('term', '1年')  # 期限
-        start_d = data.get('start_date', str(date.today()))  # 开始时间
-        fee = data.get('fee', '待定')  # 费用
-        cycle = data.get('payment_cycle', '一次性')  # 周期
-        breach = data.get('breach_terms', '依法协商')  # 违约责任
+        # 设置标题样式
+        title = doc.add_heading('IP 授权许可合同', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        doc.add_paragraph(f'甲方：星核文化科技发展有限公司\n乙方：{p_name}\n日期：{date.today()}')
+        # 提取参数
+        p_name = data.get('partner_name', '______')
+        ip_name = data.get('ip_name', '______')
+        region = data.get('region', '中国大陆')
+        media = data.get('media', '全媒体')
+        usage = data.get('usage_type', '商业授权')
+        c_type = data.get('license_type', '普通许可')
+        term = data.get('term', '1年')
+        start_d = data.get('start_date', str(date.today()))
+        fee = data.get('fee', '待定')
+        cycle = data.get('payment_cycle', '一次性支付')
+        breach = data.get('breach_terms', '依法承担赔偿责任')
 
-        doc.add_heading('一、 授权内容', level=1)
-        doc.add_paragraph(f'1. 授权标的：IP “{ip_name}”')
-        doc.add_paragraph(f'2. 授权地域：{region}')
-        doc.add_paragraph(f'3. 授权媒介：{media}')
-        doc.add_paragraph(f'4. 使用方式：{usage}')
-        doc.add_paragraph(f'5. 许可类型：{c_type}')
+        # 头部
+        doc.add_paragraph(f'合同编号：IP-{secrets.token_hex(3).upper()}-{date.today().year}')
+        doc.add_paragraph(f'\n甲方（授权方）：星核文化科技发展有限公司')
+        doc.add_paragraph(f'乙方（被授权方）：{p_name}')
+        doc.add_paragraph(f'签署日期：{date.today().strftime("%Y年%m月%d日")}')
 
-        doc.add_heading('二、 期限与费用', level=1)
-        doc.add_paragraph(f'1. 授权期限：{term} (自 {start_d} 起)')
-        doc.add_paragraph(f'2. 许可费用：{fee}')
-        doc.add_paragraph(f'3. 结算周期：{cycle}')
+        doc.add_paragraph(
+            '\n鉴于甲方拥有本合同所述IP的合法著作权，乙方希望获得该IP的使用授权，双方经友好协商，达成如下协议：')
 
-        doc.add_heading('三、 违约责任', level=1)
-        doc.add_paragraph(f'{breach}')
+        # 第一条
+        h1 = doc.add_heading('第一条 授权内容', level=1)
+        doc.add_paragraph(f'1.1 授权标的：甲方授权乙方使用 IP “{ip_name}” 的形象及相关素材。')
+        doc.add_paragraph(f'1.2 授权地域：{region}。')
+        doc.add_paragraph(f'1.3 授权渠道/媒介：{media}。')
+        doc.add_paragraph(f'1.4 具体使用方式：{usage}。')
+        doc.add_paragraph(f'1.5 许可性质：本授权为【{c_type}】。')
 
-        doc.add_heading('四、 附则', level=1)
-        doc.add_paragraph('本合同一式两份，双方签字盖章后生效。')
+        # 第二条
+        doc.add_heading('第二条 授权期限', level=1)
+        doc.add_paragraph(f'2.1 本合同有效期为 {term}，自 {start_d} 起生效。')
+        doc.add_paragraph('2.2 期限届满前30日，双方可协商续约事宜。')
 
-        fn = f"Contract_Draft_{secrets.token_hex(4)}.docx"
+        # 第三条
+        doc.add_heading('第三条 费用与支付', level=1)
+        doc.add_paragraph(f'3.1 授权费用：总金额为人民币 {fee}。')
+        doc.add_paragraph(f'3.2 支付方式：{cycle}。乙方应将款项汇入甲方指定账户。')
+        doc.add_paragraph('3.3 税费承担：除另有约定外，相关税费由各自依法承担。')
+
+        # 第四条
+        doc.add_heading('第四条 知识产权声明', level=1)
+        doc.add_paragraph('4.1 甲方保证对授权IP享有完整的知识产权，未侵犯任何第三方的合法权益。')
+        doc.add_paragraph(
+            '4.2 乙方在使用过程中产生的新设计（衍生品设计图等），其知识产权归属双方另行约定；若未约定，原则上归甲方所有。')
+
+        # 第五条
+        doc.add_heading('第五条 保密义务', level=1)
+        doc.add_paragraph('5.1 双方对本合同内容及在合作过程中获知的对方商业秘密负有保密义务，不得向第三方披露。')
+
+        # 第六条 (动态填入违约责任)
+        doc.add_heading('第六条 违约责任', level=1)
+        doc.add_paragraph(f'6.1 {breach}')
+        doc.add_paragraph('6.2 若乙方超出授权范围使用IP，甲方有权单方解除合同并要求赔偿。')
+
+        # 第七条
+        doc.add_heading('第七条 争议解决', level=1)
+        doc.add_paragraph('7.1 因本合同引起的任何争议，双方应友好协商解决；协商不成的，应向甲方所在地人民法院提起诉讼。')
+
+        # 签字栏
+        doc.add_paragraph('\n\n（以下无正文）\n')
+        table = doc.add_table(rows=1, cols=2)
+        row = table.rows[0]
+        row.cells[0].text = "甲方：星核文化科技发展有限公司\n\n代表签字：__________________"
+        row.cells[1].text = f"乙方：{p_name}\n\n代表签字：__________________"
+
+        # 保存
+        fn = f"Contract_Pro_{secrets.token_hex(4)}.docx"
         sd = os.path.join(current_app.root_path, 'static', 'generated_docs')
         if not os.path.exists(sd): os.makedirs(sd)
         doc.save(os.path.join(sd, fn))
@@ -429,4 +444,5 @@ def internal_generate_contract_doc():
             "download_url": url_for('static', filename=f'generated_docs/{fn}', _external=True)
         })
     except Exception as e:
+        print(f"Gen Doc Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
