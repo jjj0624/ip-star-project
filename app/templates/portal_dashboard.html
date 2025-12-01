@@ -3,21 +3,58 @@
 {% block content %}
 <div class="container-fluid py-4">
     <div class="text-center mb-5">
-        <h1 class="fw-bold text-primary">IP 星伴 · 授权门户</h1>
-        <p class="text-muted">发现无限商业可能</p>
+        <h1 class="fw-bold text-primary">IP 星伴 · 合作伙伴端</h1>
+        <p class="text-muted">连接创意，共创价值</p>
     </div>
 
     <div class="mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4 ps-3 border-start border-4 border-success">
+            <h3 class="fw-bold mb-0">IP 形象库</h3>
+            <form class="d-flex" action="{{ url_for('main.portal_dashboard') }}">
+                <input class="form-control me-2" type="search" name="q" placeholder="搜索IP名称或标签" value="{{ search_query }}">
+                <button class="btn btn-outline-success" type="submit">搜索</button>
+            </form>
+        </div>
+
+        <div class="row row-cols-1 row-cols-md-4 g-4">
+            {% for ip in ips %}
+            <div class="col">
+                <div class="card h-100 border-0 shadow-sm ip-card">
+                    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" style="height:250px; object-fit:cover;">
+                    <div class="card-body text-center d-flex flex-column">
+                        <h5 class="fw-bold">{{ ip.name }}</h5>
+                        <div class="mb-3">
+                            {% if ip.tags %}
+                                {% for tag in ip.tags.split('；') %}
+                                    <span class="badge bg-light text-secondary border">{{ tag }}</span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        <div class="mt-auto">
+                            <a href="{{ url_for('main.ip_detail', ip_id=ip.id) }}" class="btn btn-outline-primary rounded-pill px-4">查看详情</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <hr class="my-5">
+
+    <div class="mb-5">
         <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-primary">精彩合作案例</h3>
-        <div id="caseCarousel" class="carousel slide shadow rounded" data-bs-ride="carousel">
+        <div id="caseCarousel" class="carousel slide shadow rounded bg-dark" data-bs-ride="carousel">
             <div class="carousel-inner">
                 {% for case in cases %}
                 <div class="carousel-item {% if loop.first %}active{% endif %}">
-                    <div class="d-flex align-items-center justify-content-center p-5 text-white"
-                         style="height: 400px; background: url('{{ url_for('static', filename=case.case_image_url) }}') center/cover;">
-                        <div class="p-4" style="background: rgba(0,0,0,0.6); border-radius: 10px;">
-                            <h2>{{ case.partner_brand }} x {{ case.ip_asset.name }}</h2>
-                            <p>{{ case.usage_type }}</p>
+                    <div class="d-flex align-items-center justify-content-center" style="height: 500px; background-color: #212529;">
+                        <img src="{{ url_for('static', filename=case.case_image_url) }}" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+
+                        <div class="position-absolute bottom-0 start-0 w-100 p-4 text-center text-white"
+                             style="background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);">
+                            <h2 class="fw-bold">{{ case.partner_brand }} x {{ case.ip_asset.name }}</h2>
+                            <p class="fs-5">{{ case.usage_type }}</p>
                         </div>
                     </div>
                 </div>
@@ -28,25 +65,13 @@
         </div>
     </div>
 
-    <div class="mb-5">
-        <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-success">IP 形象库</h3>
-        <div class="row row-cols-1 row-cols-md-4 g-4">
-            {% for ip in ips %}
-            <div class="col">
-                <div class="card h-100 border-0 shadow-sm ip-card">
-                    <img src="{{ url_for('static', filename=ip.image_url) }}" class="card-img-top" style="height:250px; object-fit:cover;">
-                    <div class="card-body text-center">
-                        <h5 class="fw-bold">{{ ip.name }}</h5>
-                        <small class="text-muted">{{ ip.tags }}</small>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
     {% if tencent_embed_url %}
-    <a href="{{ tencent_embed_url }}" target="_blank" class="btn btn-success btn-lg rounded-pill shadow-lg" style="position:fixed;bottom:20px;right:20px;">💡 合作咨询</a>
+    <div style="position:fixed;bottom:20px;right:20px;z-index:999;text-align:center;">
+        <a href="{{ tencent_embed_url }}" target="_blank" class="btn btn-success btn-lg rounded-pill shadow-lg border-2 border-white">
+            <i class="bi bi-chat-dots"></i> 伙伴端智能体
+        </a>
+        <div class="text-muted small mt-1 bg-white px-2 rounded shadow-sm">点击跳转腾讯云智能体</div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
