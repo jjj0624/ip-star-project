@@ -51,11 +51,11 @@
                 <table class="table table-hover align-middle mb-0 text-center">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 20%;">IP信息</th>
-                            <th style="width: 35%;">法务信息</th>
+                            <th style="width: 18%;">IP信息</th>
+                            <th style="width: 32%;">法务信息</th>
                             <th style="width: 25%;">商业数据</th>
                             <th style="width: 10%;">状态</th>
-                            <th style="width: 100px;">操作</th>
+                            <th style="width: 120px;">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -155,11 +155,11 @@
                         <tr>
                             <th style="width: 60px;">案例</th>
                             <th style="width: 10%;">IP名称</th>
-                            <th style="width: 12%;">相对方 & 品牌</th>
+                            <th style="width: 18%;">相对方 & 品牌</th>
                             <th style="width: 12%;">许可信息</th>
                             <th style="width: 20%;">有效期</th>
-                            <th style="width: 100px;">原件</th>
-                            <th style="width: 80px;">操作</th>
+                            <th style="width: 80px;">原件</th>
+                            <th style="width: 70px;">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -172,7 +172,7 @@
                             </td>
                             <td class="fw-bold">{{ c.ip_asset.name }}</td>
                             <td>
-                                <div class="text-truncate mx-auto" style="max-width: 120px;" title="{{ c.partner_name }}">{{ c.partner_name }}</div>
+                                <div class="fw-bold text-truncate mx-auto" style="max-width: 180px;" title="{{ c.partner_name }}">{{ c.partner_name }}</div>
                                 <small class="text-muted"><i class="bi bi-tag"></i> {{ c.partner_brand }}</small>
                             </td>
                             <td>
@@ -180,16 +180,12 @@
                                 <div class="small mt-1 text-muted text-truncate mx-auto" style="max-width: 100px;" title="{{ c.region }}">{{ c.region }}</div>
                             </td>
                             <td class="small">
-                                <div class="d-flex justify-content-center gap-2">
-                                    <span>{{ c.term_start }}</span>
-                                    <span><i class="bi bi-arrow-right"></i></span>
-                                    <span>{{ c.term_end }}</span>
-                                </div>
+                                {{ c.term_start }}<br>—<br>{{ c.term_end }}
                             </td>
                             <td>
                                 {% if c.pdf_url %}
-                                <a href="{{ url_for('static', filename=c.pdf_url) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0" style="font-size: 0.8rem;">
-                                    PDF
+                                <a href="{{ url_for('static', filename=c.pdf_url) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0" style="font-size: 0.75rem;">
+                                    合同pdf
                                 </a>
                                 {% else %}-{% endif %}
                             </td>
@@ -213,62 +209,20 @@
                 <div class="modal-header"><h5 class="modal-title">录入新 IP 资产</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">IP名称</label>
-                            {{ ip_form.name(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">作者</label>
-                            {{ ip_form.author(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">权属</label>
-                            {{ ip_form.ownership(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">登记号</label>
-                            {{ ip_form.reg_number(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">登记日期</label>
-                            {{ ip_form.reg_date(class="form-control", type="date") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">可授权期限</label>
-                            {{ ip_form.license_period(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">商业价值级别</label>
-                            {{ ip_form.value_level(class="form-select") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">目前收益 (万元)</label>
-                            {{ ip_form.current_revenue(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">标签 (用分号分隔)</label>
-                            {{ ip_form.tags(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">商标信息</label>
-                            {{ ip_form.trademark_info(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">图样文件</label>
-                            {{ ip_form.image_file(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">创作说明</label>
-                            {{ ip_form.description(class="form-control", rows=3) }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">负责员工邮箱</label>
-                            {{ ip_form.contact_email(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">可提供的许可类型 (备注)</label>
-                            {{ ip_form.license_type_options(class="form-control") }}
-                        </div>
+                        <div class="col-md-6"><label class="form-label">IP名称</label>{{ ip_form.name(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">作者</label>{{ ip_form.author(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">权属</label>{{ ip_form.ownership(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">登记号</label>{{ ip_form.reg_number(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">登记日期</label>{{ ip_form.reg_date(class="form-control", type="date") }}</div>
+                        <div class="col-md-6"><label class="form-label">可授权期限</label>{{ ip_form.license_period(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">商业价值级别</label>{{ ip_form.value_level(class="form-select") }}</div>
+                        <div class="col-md-6"><label class="form-label">目前收益 (万元)</label>{{ ip_form.current_revenue(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">标签 (用分号分隔)</label>{{ ip_form.tags(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">商标信息</label>{{ ip_form.trademark_info(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">图样文件</label>{{ ip_form.image_file(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">创作说明</label>{{ ip_form.description(class="form-control", rows=3) }}</div>
+                        <div class="col-12"><label class="form-label">负责员工邮箱</label>{{ ip_form.contact_email(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">可提供的许可类型 (备注)</label>{{ ip_form.license_type_options(class="form-control") }}</div>
                     </div>
                 </div>
                 <div class="modal-footer"><button type="submit" class="btn btn-primary">确认添加</button></div>
@@ -283,70 +237,22 @@
                 <div class="modal-header"><h5 class="modal-title">录入新合同</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">选择关联IP</label>
-                            {{ contract_form.ip_id(class="form-select") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">许可类型</label>
-                            {{ contract_form.license_type(class="form-select") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">相对方名称</label>
-                            {{ contract_form.partner_name(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">相对方品牌</label>
-                            {{ contract_form.partner_brand(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">开始日期</label>
-                            {{ contract_form.term_start(class="form-control", type="date") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">结束日期</label>
-                            {{ contract_form.term_end(class="form-control", type="date") }}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">许可地域</label>
-                            {{ contract_form.region(class="form-control") }}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">许可方式</label>
-                            {{ contract_form.license_method(class="form-control") }}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">许可类别</label>
-                            {{ contract_form.license_category(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">许可媒介</label>
-                            {{ contract_form.media(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">使用方式</label>
-                            {{ contract_form.usage_type(class="form-control") }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">费用标准</label>
-                            {{ contract_form.fee_standard(class="form-control", rows=2) }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">结算周期</label>
-                            {{ contract_form.payment_cycle(class="form-control", rows=2) }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">违约责任</label>
-                            {{ contract_form.breach_terms(class="form-control", rows=2) }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">上传合作案例图 (可选)</label>
-                            {{ contract_form.case_image_file(class="form-control") }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">上传合同原件PDF (可选)</label>
-                            {{ contract_form.pdf_file(class="form-control") }}
-                        </div>
+                        <div class="col-md-6"><label class="form-label">选择关联IP</label>{{ contract_form.ip_id(class="form-select") }}</div>
+                        <div class="col-md-6"><label class="form-label">许可类型</label>{{ contract_form.license_type(class="form-select") }}</div>
+                        <div class="col-md-6"><label class="form-label">相对方名称</label>{{ contract_form.partner_name(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">相对方品牌</label>{{ contract_form.partner_brand(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">开始日期</label>{{ contract_form.term_start(class="form-control", type="date") }}</div>
+                        <div class="col-md-6"><label class="form-label">结束日期</label>{{ contract_form.term_end(class="form-control", type="date") }}</div>
+                        <div class="col-md-4"><label class="form-label">许可地域</label>{{ contract_form.region(class="form-control") }}</div>
+                        <div class="col-md-4"><label class="form-label">许可方式</label>{{ contract_form.license_method(class="form-control") }}</div>
+                        <div class="col-md-4"><label class="form-label">许可类别</label>{{ contract_form.license_category(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">许可媒介</label>{{ contract_form.media(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">使用方式</label>{{ contract_form.usage_type(class="form-control") }}</div>
+                        <div class="col-12"><label class="form-label">费用标准</label>{{ contract_form.fee_standard(class="form-control", rows=2) }}</div>
+                        <div class="col-12"><label class="form-label">结算周期</label>{{ contract_form.payment_cycle(class="form-control", rows=2) }}</div>
+                        <div class="col-12"><label class="form-label">违约责任</label>{{ contract_form.breach_terms(class="form-control", rows=2) }}</div>
+                        <div class="col-md-6"><label class="form-label">上传合作案例图 (可选)</label>{{ contract_form.case_image_file(class="form-control") }}</div>
+                        <div class="col-md-6"><label class="form-label">上传合同原件PDF (可选)</label>{{ contract_form.pdf_file(class="form-control") }}</div>
                     </div>
                 </div>
                 <div class="modal-footer"><button type="submit" class="btn btn-success">确认合同</button></div>
@@ -372,4 +278,4 @@
     c2.setOption({tooltip:{trigger:'axis'}, xAxis:{type:'category',data:{{click_x|tojson}}}, yAxis:{type:'value'}, series:[{type:'line',smooth:true,data:{{click_y|tojson}},itemStyle:{color:'#0d6efd'}}]});
     window.onresize=function(){c1.resize();c2.resize();};
 </script>
-{% endblock %}git push
+{% endblock %}
