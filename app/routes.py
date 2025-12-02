@@ -239,22 +239,50 @@ def delete_ip(ip_id):
 @internal_required
 def add_contract():
     form = ContractForm()
+    # 重新填充 IP 选项，防止校验失败
     form.ip_id.choices = [(i.id, i.name) for i in IpAsset.query.all()]
+
     if form.validate_on_submit():
+        # 处理图片和PDF
         img = save_picture(form.case_image_file.data) if form.case_image_file.data else None
         pdf = save_pdf(form.pdf_file.data) if form.pdf_file.data else None
-        # 注意: breach_terms 如果前端没传，form.breach_terms.data 可能是 '' 或 None，这都没问题
-        nc = Contract(ip_id=form.ip_id.data, partner_name=form.partner_name.data, partner_brand=form.partner_brand.data,
-                      region=form.region.data, media=form.media.data, license_method=form.license_method.data,
-                      license_category=form.license_category.data, usage_type=form.usage_type.data,
-                      license_type=form.license_type.data, term_start=form.term_start.data, term_end=form.term_end.data,
-                      fee_standard=form.fee_standard.data, payment_cycle=form.payment_cycle.data,
-                      breach_terms=form.breach_terms.data, case_image_url=img, pdf_url=pdf)
-        db.session.add(nc);
-        db.session.commit();
-        flash('合同添加成功', 'success')
+
+        # 创建新合同对象
+        # 【修复关键】：这里删除了 breach_terms 字段，防止报错
+        nc = Contract(
+            ip_id=form.ip_id.data,
+            partner_name=form.partner_name.data,
+            partner_brand=form.partner_brand.data,
+            region=form.region.data,
+            media=form.media.data,
+            license_method=form.license_method.data,
+            license_category=form.license_category.data,
+            usage_type=form.usage_type.data,
+            license_type=form.license_type.data,
+            term_start=form.term_start.data,
+            term_end=form.term_end.data,
+            fee_standard=form.fee_standard.data,
+            payment_cycle=form.payment_cycle.data,
+            # breach_terms=form.breach_terms.data,  <-- 这行已被删除，解决报错！
+            case_image_url=img,
+            pdf_url=pdf
+        )
+
+        try:
+            db.session.add(nc)
+            db.session.commit()
+            flash('合同添加成功', 'success')
+        except Exception as e:
+            db.session.rollback()
+            # 打印错误到日志，方便排查
+            print(f"Database Add Error: {e}")
+            flash(f'添加失败: {e}', 'danger')
+
     else:
-        flash('添加失败', 'danger')
+        # 如果表单验证失败，打印错误原因到控制台/日志
+        print(f"Form Validation Errors: {form.errors}")
+        flash('合同表单验证失败，请检查输入项', 'danger')
+
     return redirect(url_for('main.internal_dashboard'))
 
 
