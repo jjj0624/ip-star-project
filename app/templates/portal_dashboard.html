@@ -11,6 +11,14 @@
         <div class="d-flex justify-content-between align-items-center mb-4 ps-3 border-start border-4 border-success">
             <h3 class="fw-bold mb-0">IP 形象库</h3>
             <form class="d-flex" action="{{ url_for('main.portal_dashboard') }}">
+                <select class="form-select me-2" name="level" style="width: auto;">
+                    <option value="">所有级别</option>
+                    <option value="S" {% if search_level=='S' %}selected{% endif %}>S 级 (顶流)</option>
+                    <option value="A" {% if search_level=='A' %}selected{% endif %}>A 级 (热门)</option>
+                    <option value="B" {% if search_level=='B' %}selected{% endif %}>B 级 (潜力)</option>
+                    <option value="C" {% if search_level=='C' %}selected{% endif %}>C 级 (新锐)</option>
+                </select>
+
                 <input class="form-control me-2" type="search" name="q" placeholder="搜索IP名称或标签" value="{{ search_query }}">
                 <button class="btn btn-outline-success" type="submit">搜索</button>
             </form>
@@ -44,28 +52,21 @@
 
     <div class="mb-5">
         <h3 class="fw-bold mb-4 ps-3 border-start border-4 border-primary">精彩合作案例</h3>
-
         <div id="caseCarousel" class="carousel slide shadow rounded overflow-hidden" data-bs-ride="carousel" data-bs-interval="2500">
             <div class="carousel-inner">
                 {% for case in cases %}
                 <div class="carousel-item {% if loop.first %}active{% endif %}">
                     <div style="height: 500px; position: relative; background-color: #000; overflow: hidden;">
-
                         <div style="
                             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
                             background-image: url('{{ url_for('static', filename=case.case_image_url) }}');
-                            background-position: center;
-                            background-size: cover;
-                            filter: blur(20px);
-                            opacity: 0.6;
-                            z-index: 1;
+                            background-position: center; background-size: cover;
+                            filter: blur(20px); opacity: 0.6; z-index: 1;
                         "></div>
-
                         <div class="d-flex align-items-center justify-content-center h-100 position-relative" style="z-index: 2;">
                             <img src="{{ url_for('static', filename=case.case_image_url) }}"
                                  style="max-height: 90%; max-width: 90%; object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         </div>
-
                         <div class="position-absolute bottom-0 start-0 w-100 p-4 text-center text-white"
                              style="z-index: 3; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);">
                             <h2 class="fw-bold">{{ case.partner_brand }} x {{ case.ip_asset.name }}</h2>
@@ -75,14 +76,11 @@
                 </div>
                 {% endfor %}
             </div>
-
             <button class="carousel-control-prev" type="button" data-bs-target="#caseCarousel" data-bs-slide="prev" style="z-index: 10; width: 10%;">
                 <span class="carousel-control-prev-icon bg-dark rounded-circle p-3" aria-hidden="true" style="background-size: 50%;"></span>
-                <span class="visually-hidden">Previous</span>
             </button>
             <button class="carousel-control-next" type="button" data-bs-target="#caseCarousel" data-bs-slide="next" style="z-index: 10; width: 10%;">
                 <span class="carousel-control-next-icon bg-dark rounded-circle p-3" aria-hidden="true" style="background-size: 50%;"></span>
-                <span class="visually-hidden">Next</span>
             </button>
         </div>
     </div>
