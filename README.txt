@@ -26,3 +26,5 @@ IP 星伴 是一个集成了 Web 端管理系统 与 LLM 大模型智能体 的�
 
 三、开发与运行 (Local Setup)
 已通过pythonanywhere部署至云上操作。
+
+注：部署数据库的SQL代码详见setup.sql
